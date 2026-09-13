@@ -1,0 +1,3 @@
+# Normalize to LF in the repository; check out native. Keeps diffs clean across
+# the Windows, Linux, and mobile clients.
+* text=auto eol=lf

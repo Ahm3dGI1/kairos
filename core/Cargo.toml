@@ -1,0 +1,10 @@
+[package]
+name = "mtodo-core"
+description = "Shared task model and natural-language parsing for Master Todo App"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
