@@ -24,13 +24,13 @@ and auth model, stretch goals, and the open questions still unsettled.
 
 ## Tech stack
 
-Still partly undecided — do not treat a candidate as a commitment.
+Phase 1 is built; the later platforms are still open. Do not treat a candidate as a commitment.
 
 | Area          | Choice                                          | Status         |
 | ------------- | ----------------------------------------------- | -------------- |
-| Core logic    | Rust — `mtodo-core`, parser landed               | Decided        |
-| Windows shell | Tauri — lighter than Electron                    | Decided        |
-| Local storage | SQLite, per device                               | Decided        |
+| Core logic    | Rust — `mtodo-core`: parse, recur, store         | Built          |
+| Windows shell | Tauri v2 — no bundler, static frontend           | Built          |
+| Local storage | SQLite via `rusqlite`, per device                | Built          |
 | Sync server   | Postgres + realtime, or a custom minimal server  | Candidate      |
 | Linux client  | Rust TUI (ratatui) or the existing Go/Bubbletea  | **Open** (§6)  |
 | Mobile client | React Native or Flutter                          | **Open** (§6)  |
@@ -38,16 +38,18 @@ Still partly undecided — do not treat a candidate as a commitment.
 
 Rust won the core-language question: it is already Tauri's backend language, so the Windows shell
 links it with no bridge, and it alone also serves a Linux TUI. Mobile pays an FFI layer (uniffi).
+The Windows frontend is deliberately plain HTML/CSS/ES modules — no npm, no bundler, no
+`node_modules` — so `cargo run` is the entire dev loop. Requires Rust 1.88+.
 
 ## Repo structure
 
 Monorepo — one maintainer, one shared core, so a parsing fix lands everywhere in one PR. Split into
-separate repos only if independent maintainers take over a platform. Only `/core` has code; every
-other directory is a README stub.
+separate repos only if independent maintainers take over a platform. `/core` and `/windows-app`
+are built; the rest are README stubs.
 
 ```
-/core          shared business logic: task model, NL parsing, sync client  (crate mtodo-core)
-/windows-app   Tauri shell: tray icon, widget, hotkey launcher, UI  (phase 1)
+/core          task model, NL parsing, recurrence, SQLite store  (crate mtodo-core)
+/windows-app   Tauri shell: tray, widget, hotkey, calendar, UI    (crate mtodo-windows)
 /linux-app     terminal client                                       (future)
 /mobile-app    React Native or Flutter client                        (future)
 /sync-server   self-hostable sync backend
@@ -56,25 +58,25 @@ other directory is a README stub.
 
 ## Build / test / lint
 
-`/core` is a Rust crate in the root Cargo workspace; every other package is still a stub.
+Both crates live in the root Cargo workspace.
 
 ```sh
-cargo build                  # workspace
-cargo test                   # unit + corpus + doc tests
-cargo clippy --all-targets   # lint
-cargo fmt                    # format
+cargo run -p mtodo-windows      # launch the Windows app
+cargo test -p mtodo-core        # the fast loop: parser, recurrence, store
+cargo clippy --workspace --all-targets
+cargo fmt
 ```
 
 ## Conventions
 
 - **`/core` owns all task semantics.** Parsing, recurrence, and the task model live there and
-  nowhere else. Clients are presentation and platform integration only.
+  nowhere else. Clients are presentation and platform integration only — a Tauri command should be
+  a thin wrapper over a core call, never a place where a rule gets restated.
 - **Offline-first is a hard requirement, not a fallback.** A feature that stops working without
   a network is a bug; sync reconciles later and is never in the critical path.
 - **Self-hosting is the deployment model.** No dependency on a service the project would have
   to run, or on accounts a user cannot provision themselves.
 - **Cross-platform by default.** Platform-specific code stays in that platform's package.
-- **Code style is delegated to linters and formatters** once tooling is chosen — do not add
-  formatting rules here.
+- **Code style is delegated to `rustfmt` and `clippy`** — do not add formatting rules here.
 - **Keep this file and the spec in sync.** When an open question in §6 is resolved, update both
   the spec and the status table above in the same change.

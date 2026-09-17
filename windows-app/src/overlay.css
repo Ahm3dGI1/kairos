@@ -1,0 +1,103 @@
+/* The two frameless windows: the hotkey overlay and the desktop widget.
+   Both are borderless, so they draw their own edge and drag region. */
+
+body.overlay {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+body.overlay #line {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 17px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  outline: none;
+}
+
+body.overlay #line:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+body.widget {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.widget-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  cursor: grab;
+}
+
+.widget-head span {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.widget-head button {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.widget-head button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.widget-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  height: calc(100vh - 42px);
+}
+
+.widget-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.widget-list li:hover {
+  background: var(--surface-2);
+}
+
+.widget-list .when {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.widget-list .when.overdue {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.widget-empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}

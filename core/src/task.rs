@@ -85,7 +85,7 @@ impl Task {
 
     pub fn has_tag(&self, tag: &str) -> bool {
         let tag = tag.trim().to_lowercase();
-        self.tags.iter().any(|t| *t == tag)
+        self.tags.contains(&tag)
     }
 }
 
@@ -231,6 +231,39 @@ impl Recurrence {
     /// "every weekend" — Saturday and Sunday.
     pub const WEEKENDS: Self = Recurrence::Weekly { days: WeekdaySet::WEEKENDS };
 
+    /// A human phrase for the rule, for list rows and tooltips. Lives here
+    /// rather than in a client so every shell says the same thing.
+    pub fn describe(self) -> String {
+        match self {
+            Recurrence::Daily => "every day".into(),
+            Recurrence::EveryNDays(2) => "every other day".into(),
+            Recurrence::EveryNDays(n) => format!("every {n} days"),
+            Recurrence::Weekly { days } => match days {
+                d if d.is_empty() => "every week".into(),
+                d if d == WeekdaySet::WEEKDAYS => "every weekday".into(),
+                d if d == WeekdaySet::WEEKENDS => "every weekend".into(),
+                d => format!("every {}", join_days(d)),
+            },
+            Recurrence::EveryNWeeks { n, days } => {
+                let every = if n == 2 {
+                    "every other week".to_string()
+                } else {
+                    format!("every {n} weeks")
+                };
+                if days.is_empty() {
+                    every
+                } else {
+                    format!("{every} on {}", join_days(days))
+                }
+            }
+            Recurrence::Monthly { day: None } => "every month".into(),
+            Recurrence::Monthly { day: Some(d) } => format!("every month on the {}", ordinal(d)),
+            Recurrence::EveryNMonths(2) => "every other month".into(),
+            Recurrence::EveryNMonths(n) => format!("every {n} months"),
+            Recurrence::Yearly => "every year".into(),
+        }
+    }
+
     /// Collapses the degenerate "every 1 X" forms onto their plain equivalents,
     /// so callers never have to treat `EveryNDays(1)` and `Daily` separately.
     pub(crate) fn normalized(self) -> Self {
@@ -268,4 +301,38 @@ impl Exception {
     pub fn move_to(date: NaiveDate, to: NaiveDate) -> Self {
         Self { date, action: ExceptionAction::MoveTo(to) }
     }
+}
+
+/// "Monday and Wednesday", "Monday, Wednesday and Friday".
+fn join_days(days: WeekdaySet) -> String {
+    let names: Vec<String> = days.days().map(|d| day_name(d).to_string()).collect();
+    match names.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+fn day_name(day: Weekday) -> &'static str {
+    match day {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
+    }
+}
+
+/// 1 -> "1st", 22 -> "22nd". The teens are all "th".
+fn ordinal(n: u32) -> String {
+    let suffix = match (n % 10, n % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{n}{suffix}")
 }

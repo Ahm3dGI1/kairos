@@ -1,0 +1,589 @@
+/* Master Todo — Windows 11 shell.
+   Fluent-adjacent: Segoe UI Variable, 8px radii, quiet surfaces, one accent.
+   Light and dark both defined from tokens so neither is an afterthought. */
+
+:root {
+  --accent: #5850ec;
+  --accent-soft: #eceafe;
+  --bg: #f6f6f8;
+  --surface: #ffffff;
+  --surface-2: #f1f1f4;
+  --border: #e2e2e7;
+  --text: #16161a;
+  --text-dim: #63636e;
+  --text-faint: #8e8e99;
+  --danger: #c4314b;
+  --warn: #b45309;
+  --ok: #107c41;
+  --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 8%);
+  --radius: 8px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #8b85ff;
+    --accent-soft: #26244a;
+    --bg: #17171b;
+    --surface: #202026;
+    --surface-2: #2a2a32;
+    --border: #33333d;
+    --text: #f2f2f5;
+    --text-dim: #a8a8b4;
+    --text-faint: #7c7c88;
+    --danger: #ff7a90;
+    --warn: #f0b429;
+    --ok: #4ade80;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 40%);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+kbd {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+
+/* ---------- capture bar ---------- */
+
+.capture {
+  padding: 12px 16px 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.capture-row {
+  display: flex;
+  gap: 8px;
+}
+
+#quick-add {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+#quick-add:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+button.primary {
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary:hover {
+  filter: brightness(1.08);
+}
+
+.preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 22px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.chip.accent {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.chip.guess {
+  border-style: dashed;
+  color: var(--warn);
+}
+
+/* ---------- layout ---------- */
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 208px;
+  flex: 0 0 auto;
+  padding: 12px 8px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.side-heading {
+  margin: 16px 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.view-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.view-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.view-list li:hover {
+  background: var(--surface-2);
+}
+
+.view-list li.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.view-list .count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px;
+  overflow: hidden;
+}
+
+.content-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.content-head h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+}
+
+.content-tools {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+#search {
+  width: 200px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  outline: none;
+}
+
+#search:focus {
+  border-color: var(--accent);
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 6px 12px;
+  border: none;
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---------- task list ---------- */
+
+.tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  outline: none;
+}
+
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.task:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.task.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.task.p-high {
+  border-left-color: var(--danger);
+}
+
+.task.p-medium {
+  border-left-color: var(--warn);
+}
+
+.task.p-low {
+  border-left-color: var(--accent);
+}
+
+.task.done .title {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.check {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid var(--text-faint);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: transparent;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.check:hover {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.task.done .check {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+
+.task-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.meta .overdue {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.meta .tag {
+  color: var(--accent);
+}
+
+.empty {
+  margin: 40px auto;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* ---------- calendar ---------- */
+
+.calendar {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cal-head button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-dow {
+  padding: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.cal-day {
+  min-height: 84px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12px;
+  /* The cell grows with its tasks rather than clipping them; the row sizes to
+     the busiest day. */
+}
+
+.cal-day.other {
+  opacity: 0.4;
+}
+
+.cal-day.today {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.cal-date {
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.cal-task {
+  margin-top: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* ---------- detail pane ---------- */
+
+.detail {
+  width: 300px;
+  flex: 0 0 auto;
+  padding: 14px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+}
+
+.detail h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.field {
+  margin-bottom: 12px;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  outline: none;
+}
+
+.field textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.subtasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.subtasks li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+}
+
+.subtasks li.done span {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.detail-actions button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.detail-actions button.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+/* ---------- chrome ---------- */
+
+.hints {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.hints .spacer {
+  flex: 1;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: var(--shadow);
+  z-index: 40;
+}
+
+#error-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 14px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  z-index: 50;
+}
+
+/* Narrow windows drop the sidebar and detail pane rather than squeezing them. */
+@media (max-width: 720px) {
+  .sidebar,
+  .detail {
+    display: none;
+  }
+}

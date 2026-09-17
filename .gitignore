@@ -1,2 +1,5 @@
 /target
 **/*.rs.bk
+
+# Tauri regenerates these from tauri.conf.json and capabilities/ on every build.
+/windows-app/src-tauri/gen/

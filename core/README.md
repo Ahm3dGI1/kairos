@@ -5,16 +5,23 @@ Written once, depended on by all shells. No UI, no storage, no platform APIs.
 
 ## What exists now
 
-**Milestone 1: single-line natural-language parsing.**
+Everything the Windows client runs on: the model, the parser, the recurrence
+engine, and the local store.
 
 ```rust
 let result = parse_at("gym every day 5pm", now);
 // title "gym", time 17:00, recurrence Daily
 ```
 
-- `task.rs` — the `Task` model and the `Recurrence` rule enum
-- `parse/` — the extraction pipeline: recurrence, then time, then date; whatever
-  no extractor claimed becomes the title
+- `task.rs` — `Task`, `Priority`, `Subtask`, `WeekdaySet`, the `Recurrence` rule
+  enum, and per-occurrence `Exception`s
+- `parse/` — the extraction pipeline: markers, then recurrence, then time, then
+  date; whatever no extractor claimed becomes the title
+- `recur.rs` — expands a rule into dates, applies exceptions, and advances a
+  series on completion
+- `store/` — SQLite persistence with a durable undo log
+- `filter.rs` — the saved views (Today, Overdue, Next N days, project, tag,
+  search) and their sort orders
 
 Ambiguity is resolved by guessing rather than asking, because capture speed is the
 point of the app. Every guess lands in `ParseResult::guesses`, and
@@ -35,27 +42,25 @@ Try it: `cargo run -p mtodo-core --example try_parse -- "gym every day 5pm"`
 | Relative dates | `today`, `tomorrow`, `tonight`, `in 3 days`, `next week` |
 | Weekdays | `friday`, `next friday`, `this friday`, `wed` |
 | Absolute dates | `march 5`, `5th of march`, `oct 2nd 2027`, `2026-12-25` |
-| Recurrence | `every day`, `daily`, `every other day`, `every 3 days`, `every monday`, `mondays`, `every weekday`, `every 15th`, `every month on the 1st`, `every 6 months` |
+| Recurrence | `every day`, `daily`, `every other day`, `every 3 days`, `every monday`, `mondays`, `every monday and wednesday`, `every weekday`, `every 15th`, `every month on the 1st`, `every 6 months` |
+| Markers | `#tag`, `@project`, `!p1` / `!high` / `!!!` |
 
 A bare number is only a time when something marks it as one — an am/pm suffix, a
 colon, or a preceding "at" — so "call 5 people" keeps its 5.
 
 ## Not yet
 
-Deliberately out of scope for milestone 1, in rough priority order:
-
-- `!priority`, `#tag`, `@project` extraction from the same input line
-- Multi-weekday rules — "every monday and wednesday" currently claims only the
-  first weekday and reads the second as a due date
-- Occurrence expansion and per-occurrence exceptions (this is where `rrule` comes
-  in, with `Recurrence` as its input rather than growing more variants)
+- The sync client (waiting on `/sync-server`)
 - Numeric slash dates (`12/25`), which need a locale decision first
-- The SQLite store and the sync client
+- Relative times ("in 20 minutes"), and durations
+- Full RFC 5545 recurrence. `Recurrence` covers the phrases the parser accepts;
+  if the rules ever outgrow that, it becomes the input to an `rrule`-backed
+  generator rather than growing more variants of its own.
 
 ## Commands
 
 ```sh
-cargo test -p mtodo-core        # unit + corpus + doc tests
-cargo clippy --all-targets      # lint
-cargo fmt                       # format
+cargo test -p mtodo-core                  # 57 tests: corpus, recurrence, store
+cargo clippy --workspace --all-targets
+cargo fmt
 ```

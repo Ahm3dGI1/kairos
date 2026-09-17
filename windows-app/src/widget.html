@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Master Todo widget</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body class="widget">
+    <div id="error-bar" hidden></div>
+    <header class="widget-head" data-tauri-drag-region>
+      <strong data-tauri-drag-region>Today</strong>
+      <span id="summary" data-tauri-drag-region></span>
+      <button id="open" type="button" title="Open Master Todo">↗</button>
+      <button id="close" type="button" title="Hide widget">✕</button>
+    </header>
+    <ul id="list" class="widget-list"></ul>
+    <script type="module" src="widget.js"></script>
+  </body>
+</html>

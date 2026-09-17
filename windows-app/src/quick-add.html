@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quick add</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body class="overlay">
+    <div id="error-bar" hidden></div>
+    <input
+      id="line"
+      type="text"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="What needs doing?  —  Enter to add, Esc to dismiss"
+      aria-label="Add a task"
+    />
+    <div id="preview" class="preview" aria-live="polite"></div>
+    <script type="module" src="quick-add.js"></script>
+  </body>
+</html>

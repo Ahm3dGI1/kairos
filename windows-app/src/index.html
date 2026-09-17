@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Master Todo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="error-bar" hidden></div>
+
+    <header class="capture">
+      <div class="capture-row">
+        <input
+          id="quick-add"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="gym every day 5pm  @health  #fitness  !p1"
+          aria-label="Add a task in one line"
+        />
+        <button id="add-button" class="primary" type="button">Add</button>
+      </div>
+      <div id="preview" class="preview" aria-live="polite"></div>
+    </header>
+
+    <div class="body">
+      <nav class="sidebar" aria-label="Views">
+        <ul id="views" class="view-list"></ul>
+
+        <h2 class="side-heading">Projects</h2>
+        <ul id="projects" class="view-list"></ul>
+
+        <h2 class="side-heading">Tags</h2>
+        <ul id="tags" class="view-list"></ul>
+      </nav>
+
+      <main class="content">
+        <div class="content-head">
+          <h1 id="view-title">Today</h1>
+          <div class="content-tools">
+            <input
+              id="search"
+              type="search"
+              placeholder="Search…  (/)"
+              aria-label="Search tasks"
+            />
+            <div class="segmented" role="group" aria-label="Layout">
+              <button id="tab-list" class="active" type="button">List</button>
+              <button id="tab-calendar" type="button">Calendar</button>
+            </div>
+          </div>
+        </div>
+
+        <ul id="task-list" class="tasks" tabindex="0" aria-label="Tasks"></ul>
+        <div id="calendar" class="calendar" hidden></div>
+        <p id="empty" class="empty" hidden></p>
+      </main>
+
+      <aside id="detail" class="detail" hidden aria-label="Task detail"></aside>
+    </div>
+
+    <footer class="hints">
+      <span><kbd>N</kbd> add</span>
+      <span><kbd>/</kbd> search</span>
+      <span><kbd>J</kbd>/<kbd>K</kbd> move</span>
+      <span><kbd>Space</kbd> complete</span>
+      <span><kbd>Enter</kbd> details</span>
+      <span><kbd>E</kbd> edit</span>
+      <span><kbd>Del</kbd> delete</span>
+      <span><kbd>U</kbd> undo</span>
+      <span><kbd>C</kbd> calendar</span>
+      <span><kbd>W</kbd> widget</span>
+      <span class="spacer"></span>
+      <span id="summary"></span>
+    </footer>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
