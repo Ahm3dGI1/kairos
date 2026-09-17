@@ -25,7 +25,9 @@ pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Tells every window the task list moved under it.
+/// Tells every window the task list moved under it, and refreshes the tray
+/// tooltip so a hover is never stale.
 pub fn notify_changed(app: &AppHandle) {
     let _ = app.emit(TASKS_CHANGED, ());
+    crate::reminders::update_tooltip(app);
 }

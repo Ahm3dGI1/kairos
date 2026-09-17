@@ -39,6 +39,7 @@ Try it: `cargo run -p mtodo-core --example try_parse -- "gym every day 5pm"`
 | | |
 | --- | --- |
 | Times | `5pm`, `5:30pm`, `17:00`, `at 5`, `noon`, `midnight` |
+| | A time with no date means the next time that clock time comes round — today if it is still ahead, otherwise tomorrow. |
 | Relative dates | `today`, `tomorrow`, `tonight`, `in 3 days`, `next week` |
 | Weekdays | `friday`, `next friday`, `this friday`, `wed` |
 | Absolute dates | `march 5`, `5th of march`, `oct 2nd 2027`, `2026-12-25` |
@@ -60,7 +61,7 @@ colon, or a preceding "at" — so "call 5 people" keeps its 5.
 ## Commands
 
 ```sh
-cargo test -p mtodo-core                  # 57 tests: corpus, recurrence, store
+cargo test -p mtodo-core                  # 58 tests: corpus, recurrence, store
 cargo clippy --workspace --all-targets
 cargo fmt
 ```

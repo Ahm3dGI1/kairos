@@ -20,6 +20,10 @@ fn today() -> Option<NaiveDate> {
     date(2026, 9, 13)
 }
 
+fn tomorrow() -> Option<NaiveDate> {
+    date(2026, 9, 14)
+}
+
 fn time(h: u32, m: u32) -> Option<NaiveTime> {
     NaiveTime::from_hms_opt(h, m, 0)
 }
@@ -86,19 +90,39 @@ fn plain_titles_stay_untouched() {
 
 #[test]
 fn times() {
+    // "Now" is 09:00, so a time later today lands today and an earlier one
+    // rolls to tomorrow — see `a_bare_time_means_the_next_time_it_comes_round`.
     check(&[
-        case!("standup 9am" => "standup", time: time(9, 0)),
-        case!("standup at 9 am" => "standup", time: time(9, 0)),
-        case!("lunch 12pm" => "lunch", time: time(12, 0)),
-        case!("sleep 12am" => "sleep", time: time(0, 0)),
-        case!("call 5:30pm" => "call", time: time(17, 30)),
-        case!("deploy 17:00" => "deploy", time: time(17, 0)),
-        case!("deploy at 17" => "deploy", time: time(17, 0)),
-        case!("lunch at noon" => "lunch", time: time(12, 0)),
-        case!("wake up at midnight" => "wake up", time: time(0, 0)),
-        case!("call mom at 5" => "call mom", time: time(17, 0)),
-        case!("workout at 7" => "workout", time: time(7, 0)),
+        case!("lunch 12pm" => "lunch", due: today(), time: time(12, 0)),
+        case!("call 5:30pm" => "call", due: today(), time: time(17, 30)),
+        case!("deploy 17:00" => "deploy", due: today(), time: time(17, 0)),
+        case!("deploy at 17" => "deploy", due: today(), time: time(17, 0)),
+        case!("lunch at noon" => "lunch", due: today(), time: time(12, 0)),
+        case!("call mom at 5" => "call mom", due: today(), time: time(17, 0)),
+        case!("standup 9am" => "standup", due: tomorrow(), time: time(9, 0)),
+        case!("standup at 9 am" => "standup", due: tomorrow(), time: time(9, 0)),
+        case!("sleep 12am" => "sleep", due: tomorrow(), time: time(0, 0)),
+        case!("wake up at midnight" => "wake up", due: tomorrow(), time: time(0, 0)),
+        case!("workout at 7" => "workout", due: tomorrow(), time: time(7, 0)),
     ]);
+}
+
+#[test]
+fn a_bare_time_means_the_next_time_it_comes_round() {
+    // A time with no date used to produce a dateless task: no view showed it and
+    // no reminder could fire. It now lands on the next day that clock time
+    // arrives, and says so when that is not today.
+    let later = parse_at("take the bread out at 5pm", now());
+    assert_eq!(later.task.due, today());
+    assert!(!later.is_guessed(Field::Date));
+
+    let passed = parse_at("take the bread out at 7am", now());
+    assert_eq!(passed.task.due, tomorrow());
+    assert!(passed.is_guessed(Field::Date), "rolling to tomorrow is an inference");
+
+    // An explicit date still wins.
+    let dated = parse_at("call mom friday at 7am", now());
+    assert_eq!(dated.task.due, date(2026, 9, 18));
 }
 
 #[test]

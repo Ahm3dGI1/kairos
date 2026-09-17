@@ -143,6 +143,23 @@ pub fn parse_at(input: &str, now: NaiveDateTime) -> ParseResult {
         result.task.due = Some(now.date());
     }
 
+    // A bare time means the next time that clock time comes round. "call mom at
+    // 5pm" is today at four o'clock and tomorrow at six — never a dateless task
+    // that no view would show and no reminder could fire.
+    if let (Some(time), None, None) = (result.task.time, result.task.due, result.task.recurrence) {
+        let today = now.date();
+        let due = if time > now.time() { Some(today) } else { today.succ_opt() };
+        if let Some(due) = due {
+            result.task.due = due.into();
+            if due != today {
+                result.guesses.push(Guess {
+                    field: Field::Date,
+                    note: format!("{} has passed today; due tomorrow", time.format("%H:%M")),
+                });
+            }
+        }
+    }
+
     result.task.title = title_from(&tokens);
     result
 }

@@ -66,7 +66,6 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut builder = TrayIconBuilder::with_id("tray")
         .menu(&menu)
-        .tooltip("Master Todo")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main(app),
             "quick" => toggle_quick_add(app),

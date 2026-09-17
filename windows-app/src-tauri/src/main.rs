@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod reminders;
 mod shell;
 mod state;
 
@@ -19,6 +20,7 @@ fn main() {
             let handle = app.handle().clone();
             state::init(&handle)?;
             shell::setup(&handle)?;
+            reminders::start(&handle);
             Ok(())
         })
         .on_window_event(|window, event| {

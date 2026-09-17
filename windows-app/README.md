@@ -33,9 +33,10 @@ WebView2 runtime — present on Windows 11 by default.
 - **Global hotkey** `Ctrl+Shift+Space` — a Spotlight-style overlay from anywhere,
   with the same live preview. Enter adds and dismisses; `Shift+Enter` keeps it
   open for a run of captures; Escape or losing focus dismisses it.
-- **System tray** — open, quick add, toggle the widget, quit. Closing a window
-  parks the app in the tray rather than quitting: a todo app that disappears
-  when you close its window stops reminding you.
+- **System tray** — hover to preview what is due today, click to open; the menu
+  has quick add, the widget toggle and quit. Closing a window parks the app in
+  the tray rather than quitting: a todo app that disappears when you close its
+  window stops reminding you.
 - **Desktop widget** — a small always-on-top panel of today's tasks. It does not
   take focus when it appears, so it never interrupts what you were doing.
 - **Views** — Today, Next 7 days, All, Overdue, Inbox, Completed, plus every
@@ -47,6 +48,17 @@ WebView2 runtime — present on Windows 11 by default.
   it survives a restart.
 - **Recurring exceptions** — skip or push a single occurrence from the detail
   pane without breaking the series.
+- **Reminders** — a Windows notification when a task's time arrives. The loop
+  polls rather than scheduling a timer per task: tasks move, recurrence shifts
+  and machines sleep, and a poll survives all three where scheduled timers go
+  stale. It only fires for a time that passed in the last five minutes, so
+  reopening the app in the evening does not replay the whole day, and only for
+  an occurrence that actually falls today, so overdue work does not ring again
+  every day at its old time.
+
+  Run from `cargo run`, Windows attributes the toast to whatever launched the
+  binary, because an unpackaged app has no registered identity of its own. An
+  installed build (`cargo tauri build`) shows up as Master Todo.
 
 ## Keyboard
 
@@ -97,8 +109,9 @@ Deleting that file resets the app.
 
 ## Not yet
 
-- Reminders and notifications (the plugin is wired up; nothing schedules yet)
 - Editing a recurrence rule from the UI — the parser sets it, the detail pane
-  cannot yet change it
+  can skip or move an occurrence but cannot change the rule
+- Per-task reminder offsets ("15 minutes before"); reminders fire at the due
+  time itself
 - Drag-and-drop reordering, and manual sort orders
 - Sync (waiting on [`/sync-server`](../sync-server))
