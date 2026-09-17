@@ -1,10 +1,11 @@
 //! Single-line natural-language parsing: "gym every day 5pm" in, a structured
 //! [`Task`] out.
 //!
-//! The pipeline runs recurrence, then time, then date, each claiming the tokens
-//! it recognizes. Whatever is left over is the title — which is why order
-//! matters: "every monday" has to become a recurrence before "monday" can be
-//! read as a due date.
+//! The pipeline runs markers, then recurrence, then time, then date, each
+//! claiming the tokens it recognizes. Whatever is left over is the title —
+//! which is why order matters: `#friday` has to be claimed as a tag before it
+//! can be read as a date, and "every monday" has to become a recurrence before
+//! "monday" can be read as a due date.
 //!
 //! Ambiguity is resolved by guessing rather than by asking, because capture
 //! speed is the point of the app. Every guess is recorded in
@@ -13,6 +14,7 @@
 //! so any of it can be overridden.
 
 mod date;
+mod markers;
 mod recurrence;
 mod time;
 mod token;
@@ -32,6 +34,9 @@ pub enum Field {
     Date,
     Time,
     Recurrence,
+    Tag,
+    Project,
+    Priority,
 }
 
 /// Where a parsed field came from in the input.
@@ -70,6 +75,11 @@ impl ParseResult {
     pub fn matched(&self, field: Field) -> Option<&FieldMatch> {
         self.matches.iter().find(|m| m.field == field)
     }
+
+    fn push_match(&mut self, field: Field, span: Range<usize>) {
+        let text = span_text(&self.input, &span);
+        self.matches.push(FieldMatch { field, span, text });
+    }
 }
 
 /// Parses a line against the current local time.
@@ -82,11 +92,25 @@ pub fn parse(input: &str) -> ParseResult {
 pub fn parse_at(input: &str, now: NaiveDateTime) -> ParseResult {
     let mut tokens = tokenize(input);
     let mut result = ParseResult {
-        task: Task::default(),
+        task: Task::new("", now.date()),
         input: input.to_string(),
         matches: Vec::new(),
         guesses: Vec::new(),
     };
+
+    let markers = markers::extract(&mut tokens);
+    for (tag, span) in markers.tags {
+        result.task.add_tag(tag);
+        result.push_match(Field::Tag, span);
+    }
+    if let Some((project, span)) = markers.project {
+        result.task.project = Some(project);
+        result.push_match(Field::Project, span);
+    }
+    if let Some((priority, span)) = markers.priority {
+        result.task.priority = priority;
+        result.push_match(Field::Priority, span);
+    }
 
     if let Some((rule, span)) = recurrence::extract(&mut tokens) {
         result.task.recurrence = Some(rule);
@@ -106,22 +130,21 @@ pub fn parse_at(input: &str, now: NaiveDateTime) -> ParseResult {
     }
 
     if let Some(found) = date::extract(&mut tokens, now.date()) {
-        result.task.date = Some(found.date);
+        result.task.due = Some(found.date);
         for note in found.guesses {
             result.guesses.push(Guess { field: Field::Date, note });
         }
         result.push_match(Field::Date, found.span);
     }
 
+    // A recurring task with no date named starts today: "gym every day" means
+    // starting now, not at some unstated point.
+    if result.task.recurrence.is_some() && result.task.due.is_none() {
+        result.task.due = Some(now.date());
+    }
+
     result.task.title = title_from(&tokens);
     result
-}
-
-impl ParseResult {
-    fn push_match(&mut self, field: Field, span: Range<usize>) {
-        let text = span_text(&self.input, &span);
-        self.matches.push(FieldMatch { field, span, text });
-    }
 }
 
 /// Prepositions that only made sense as part of a phrase the extractors took;

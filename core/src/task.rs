@@ -2,50 +2,221 @@
 //! UI, storage, or platform APIs.
 
 use chrono::{NaiveDate, NaiveTime, Weekday};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-/// A task as captured from a single line of input.
+/// Stable identifier for a task. Generated on the device that created it, so a
+/// task keeps its identity across sync without a server round-trip.
+pub type TaskId = Uuid;
+
+/// A task, however it was captured.
 ///
-/// Every field except `title` is optional: "buy milk" is a valid task with no
-/// date, time, or recurrence. Fields are public and mutable so a client can let
-/// the user override anything the parser inferred — see
-/// [`ParseResult`](crate::ParseResult) for what was inferred and how confidently.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// Only `title` is required: "buy milk" is a complete task. Every field is
+/// public and mutable so a client can let the user override anything the parser
+/// inferred — see [`ParseResult`](crate::ParseResult) for what was inferred.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
-    /// The input line with every recognized date/time/recurrence phrase removed.
+    pub id: TaskId,
+    /// The input line with every recognized structural phrase removed.
     pub title: String,
+    /// Free-form detail, never parsed.
+    pub notes: String,
     /// Local calendar date. Naive by design: the shell supplies the timezone.
-    pub date: Option<NaiveDate>,
+    /// On a recurring task this is the anchor — the first occurrence.
+    pub due: Option<NaiveDate>,
     /// Local wall-clock time.
     pub time: Option<NaiveTime>,
     pub recurrence: Option<Recurrence>,
+    /// Occurrences moved or skipped without breaking the series.
+    pub exceptions: Vec<Exception>,
+    pub priority: Priority,
+    /// Lowercased, deduplicated, insertion-ordered.
+    pub tags: Vec<String>,
+    /// The project or section this belongs to, if any.
+    pub project: Option<String>,
+    pub subtasks: Vec<Subtask>,
+    /// When this was completed. For a recurring task, completion advances
+    /// [`Task::due`] to the next occurrence instead of setting this.
+    pub completed_at: Option<NaiveDate>,
+    pub created_at: NaiveDate,
 }
 
 impl Task {
+    pub fn new(title: impl Into<String>, created_at: NaiveDate) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            title: title.into(),
+            notes: String::new(),
+            due: None,
+            time: None,
+            recurrence: None,
+            exceptions: Vec::new(),
+            priority: Priority::None,
+            tags: Vec::new(),
+            project: None,
+            subtasks: Vec::new(),
+            completed_at: None,
+            created_at,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.completed_at.is_some()
+    }
+
+    pub fn is_recurring(&self) -> bool {
+        self.recurrence.is_some()
+    }
+
+    /// Whether this is past its due date on `today`. A task with no due date is
+    /// never overdue, and a completed one stops being overdue.
+    pub fn is_overdue(&self, today: NaiveDate) -> bool {
+        !self.is_done() && self.due.is_some_and(|due| due < today)
+    }
+
+    /// Adds a tag if it is not already present. Tags are compared lowercased,
+    /// so "#Work" and "#work" are one tag.
+    pub fn add_tag(&mut self, tag: impl AsRef<str>) {
+        let tag = tag.as_ref().trim().to_lowercase();
+        if !tag.is_empty() && !self.tags.contains(&tag) {
+            self.tags.push(tag);
+        }
+    }
+
+    pub fn has_tag(&self, tag: &str) -> bool {
+        let tag = tag.trim().to_lowercase();
+        self.tags.iter().any(|t| *t == tag)
+    }
+}
+
+/// How urgent a task is, independent of its tags.
+///
+/// `None` is the default and sorts last — an unprioritized task is not the same
+/// as a low-priority one, which the user chose to deprioritize.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+pub enum Priority {
+    High,
+    Medium,
+    Low,
+    #[default]
+    None,
+}
+
+impl Priority {
+    /// Parses the forms a user might type: "p1", "high", "!!!".
+    pub fn parse(word: &str) -> Option<Self> {
+        Some(match word.trim().to_lowercase().as_str() {
+            "p1" | "1" | "high" | "urgent" | "!!!" => Priority::High,
+            "p2" | "2" | "medium" | "med" | "!!" => Priority::Medium,
+            "p3" | "3" | "low" | "!" => Priority::Low,
+            "p4" | "4" | "none" => Priority::None,
+            _ => return None,
+        })
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Priority::High => "high",
+            Priority::Medium => "medium",
+            Priority::Low => "low",
+            Priority::None => "none",
+        }
+    }
+}
+
+/// A checklist item inside a task.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subtask {
+    pub id: Uuid,
+    pub title: String,
+    pub done: bool,
+}
+
+impl Subtask {
     pub fn new(title: impl Into<String>) -> Self {
-        Self { title: title.into(), ..Default::default() }
+        Self { id: Uuid::new_v4(), title: title.into(), done: false }
+    }
+}
+
+/// A set of weekdays, stored as a bitmask so [`Recurrence`] stays `Copy`.
+///
+/// An empty set on a weekly rule means "whatever weekday the series is anchored
+/// to" — "every 2 weeks" repeats on the anchor's own day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct WeekdaySet(u8);
+
+impl WeekdaySet {
+    pub const EMPTY: Self = Self(0);
+    /// Monday through Friday.
+    pub const WEEKDAYS: Self = Self(0b0001_1111);
+    /// Saturday and Sunday.
+    pub const WEEKENDS: Self = Self(0b0110_0000);
+
+    pub fn new() -> Self {
+        Self::EMPTY
+    }
+
+    pub fn from_day(day: Weekday) -> Self {
+        Self::EMPTY.with(day)
+    }
+
+    pub fn with(self, day: Weekday) -> Self {
+        Self(self.0 | (1 << day.num_days_from_monday()))
+    }
+
+    pub fn insert(&mut self, day: Weekday) {
+        *self = self.with(day);
+    }
+
+    pub fn contains(self, day: Weekday) -> bool {
+        self.0 & (1 << day.num_days_from_monday()) != 0
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn len(self) -> u32 {
+        self.0.count_ones()
+    }
+
+    /// The days in the set, Monday first.
+    pub fn days(self) -> impl Iterator<Item = Weekday> {
+        const ORDER: [Weekday; 7] = [
+            Weekday::Mon,
+            Weekday::Tue,
+            Weekday::Wed,
+            Weekday::Thu,
+            Weekday::Fri,
+            Weekday::Sat,
+            Weekday::Sun,
+        ];
+        ORDER.into_iter().filter(move |d| self.contains(*d))
+    }
+}
+
+impl FromIterator<Weekday> for WeekdaySet {
+    fn from_iter<I: IntoIterator<Item = Weekday>>(iter: I) -> Self {
+        iter.into_iter().fold(Self::EMPTY, |set, day| set.with(day))
     }
 }
 
 /// How a task repeats.
 ///
 /// Deliberately narrower than RFC 5545 — it covers the phrases the parser
-/// recognizes and nothing more. When occurrence expansion lands (and with it
-/// per-occurrence exceptions), this becomes the input to an `rrule`-backed
-/// generator rather than growing more variants of its own.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// recognizes and nothing more. "Every weekday" and "every weekend" are not
+/// separate variants: they are [`Weekly`](Recurrence::Weekly) over the
+/// corresponding day set, which keeps the expansion engine to one weekly path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Recurrence {
     /// "every day", "daily"
     Daily,
     /// "every 3 days", "every other day"
     EveryNDays(u32),
-    /// "every week", "every monday", "mondays"
-    Weekly { weekday: Option<Weekday> },
+    /// "every week", "every monday", "mondays", "every monday and wednesday"
+    Weekly { days: WeekdaySet },
     /// "every other week", "every 3 weeks", "every other tuesday"
-    EveryNWeeks { n: u32, weekday: Option<Weekday> },
-    /// "every weekday" — Monday through Friday
-    Weekdays,
-    /// "every weekend" — Saturday and Sunday
-    Weekends,
+    EveryNWeeks { n: u32, days: WeekdaySet },
     /// "every month", "every 15th"
     Monthly { day: Option<u32> },
     /// "every 3 months", "every other month"
@@ -55,14 +226,46 @@ pub enum Recurrence {
 }
 
 impl Recurrence {
+    /// "every weekday" — Monday through Friday.
+    pub const WEEKDAYS: Self = Recurrence::Weekly { days: WeekdaySet::WEEKDAYS };
+    /// "every weekend" — Saturday and Sunday.
+    pub const WEEKENDS: Self = Recurrence::Weekly { days: WeekdaySet::WEEKENDS };
+
     /// Collapses the degenerate "every 1 X" forms onto their plain equivalents,
     /// so callers never have to treat `EveryNDays(1)` and `Daily` separately.
     pub(crate) fn normalized(self) -> Self {
         match self {
             Recurrence::EveryNDays(1) => Recurrence::Daily,
-            Recurrence::EveryNWeeks { n: 1, weekday } => Recurrence::Weekly { weekday },
+            Recurrence::EveryNWeeks { n: 1, days } => Recurrence::Weekly { days },
             Recurrence::EveryNMonths(1) => Recurrence::Monthly { day: None },
             other => other,
         }
+    }
+}
+
+/// A single occurrence that departs from the series, so one moved or skipped
+/// instance never rewrites the rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Exception {
+    /// The date the rule would have produced.
+    pub date: NaiveDate,
+    pub action: ExceptionAction,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExceptionAction {
+    /// This occurrence does not happen; the series continues.
+    Skip,
+    /// This occurrence happens on a different date instead.
+    MoveTo(NaiveDate),
+}
+
+impl Exception {
+    pub fn skip(date: NaiveDate) -> Self {
+        Self { date, action: ExceptionAction::Skip }
+    }
+
+    pub fn move_to(date: NaiveDate, to: NaiveDate) -> Self {
+        Self { date, action: ExceptionAction::MoveTo(to) }
     }
 }

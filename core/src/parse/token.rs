@@ -6,7 +6,7 @@ use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    /// Lowercased, edge-punctuation-trimmed form. Used for all matching.
+    /// Lowercased, punctuation-trimmed form. Used for all matching.
     pub text: String,
     /// The original slice, used to rebuild the title with its casing intact.
     pub raw: String,
@@ -16,7 +16,13 @@ pub struct Token {
     pub consumed: bool,
 }
 
-const EDGE_PUNCT: &[char] = &[',', ';', ':', '!', '?', '"', '\'', '(', ')', '.'];
+/// Punctuation trimmed from the end of a token: "5pm," and "gym!" should match
+/// as "5pm" and "gym".
+const TRAILING_PUNCT: &[char] = &[',', ';', ':', '!', '?', '"', '\'', ')', '.'];
+
+/// Punctuation trimmed from the start. `!` is absent deliberately — it is the
+/// priority sigil, so `!p1` must survive with its marker intact.
+const LEADING_PUNCT: &[char] = &[',', ';', ':', '?', '"', '\'', '(', '.'];
 
 impl Token {
     /// True only for an unclaimed token — extractors must never match twice on
@@ -51,13 +57,15 @@ pub fn tokenize(input: &str) -> Vec<Token> {
 
 fn make(input: &str, start: usize, end: usize) -> Token {
     let raw = &input[start..end];
-    Token {
-        text: raw.trim_matches(EDGE_PUNCT).to_lowercase(),
-        raw: raw.to_string(),
-        start,
-        end,
-        consumed: false,
-    }
+
+    // A token that is nothing but punctuation keeps it — "!!!" is a priority,
+    // not an empty token.
+    let trimmed = raw.trim_end_matches(TRAILING_PUNCT);
+    let trimmed = if trimmed.is_empty() { raw } else { trimmed };
+    let text = trimmed.trim_start_matches(LEADING_PUNCT);
+    let text = if text.is_empty() { trimmed } else { text };
+
+    Token { text: text.to_lowercase(), raw: raw.to_string(), start, end, consumed: false }
 }
 
 /// Marks `range` consumed and returns its byte span in the original input.
