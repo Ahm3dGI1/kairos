@@ -13,8 +13,10 @@ pub struct AppState {
     pub store: Mutex<Store>,
 }
 
-/// Event every window listens for: something changed, re-read your view.
-pub const TASKS_CHANGED: &str = "tasks-changed";
+/// Event every window listens for: stored data changed, re-read your view.
+/// Covers tasks, habits and the journal alike — a window knows which parts it
+/// draws, and re-reading the wrong one costs a local query.
+pub const DATA_CHANGED: &str = "data-changed";
 
 /// Opens the database under the user's app data directory and manages it.
 pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +30,6 @@ pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// Tells every window the task list moved under it, and refreshes the tray
 /// tooltip so a hover is never stale.
 pub fn notify_changed(app: &AppHandle) {
-    let _ = app.emit(TASKS_CHANGED, ());
+    let _ = app.emit(DATA_CHANGED, ());
     crate::reminders::update_tooltip(app);
 }

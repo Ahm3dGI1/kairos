@@ -9,7 +9,7 @@ use crate::task::{Recurrence, WeekdaySet};
 
 pub fn extract(tokens: &mut [Token]) -> Option<(Recurrence, Range<usize>)> {
     for i in 0..tokens.len() {
-        if tokens[i].consumed {
+        if !tokens[i].available() {
             continue;
         }
         if let Some((rule, end)) = match_at(tokens, i) {

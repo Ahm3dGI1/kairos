@@ -30,6 +30,10 @@ WebView2 runtime — present on Windows 11 by default.
 - **Single-line capture** with a live parse preview: type
   `gym every day 5pm @health #fitness !p1` and see the title, date, time,
   recurrence, project, tags and priority resolve as you type, before committing.
+  Each recognized phrase gets a tinted pill in the field itself, and **backspace
+  against a pill un-parses it** — the words drop back into the title, the way an
+  editor undoes an autoformat. Capture only appears on the Tasks and Calendar
+  pages; the habit month has nothing to capture into.
 - **Global hotkey** `Ctrl+Shift+Space` — a Spotlight-style overlay from anywhere,
   with the same live preview. Enter adds and dismisses; `Shift+Enter` keeps it
   open for a run of captures; Escape or losing focus dismisses it.
@@ -37,12 +41,22 @@ WebView2 runtime — present on Windows 11 by default.
   has quick add, the widget toggle and quit. Closing a window parks the app in
   the tray rather than quitting: a todo app that disappears when you close its
   window stops reminding you.
-- **Desktop widget** — a small always-on-top panel of today's tasks. It does not
-  take focus when it appears, so it never interrupts what you were doing.
-- **Views** — Today, Next 7 days, All, Overdue, Inbox, Completed, plus every
-  project and tag in use, each with a live count.
+- **Sticky note** — a small panel of today's tasks. By default it behaves like
+  any other window and drops behind whatever you focus next; the pin in its
+  header makes it stay above everything. It never takes focus when it appears.
+- **One task list**, not a row of tabs: everything ahead in a single scroll,
+  grouped Overdue → Today → Tomorrow → Next 7 days → Later → Someday. Completed
+  work is a toggle rather than a destination. Projects and tags narrow the list
+  from the sidebar.
+- **A minimal detail pane** — a date chip (opening a calendar with time and
+  repeat), a priority flag, the title, and one body that switches between notes
+  and subtasks. Everything else stays folded away until asked for.
 - **Calendar** — a month grid with recurrence expanded, so a daily task appears
   on every day it actually falls on.
+- **Habits by the month** — habits down the side, days across the top, one tick
+  per cell, with screen time and sleep as their own numeric rows. Beside it, a
+  journal for the whole month: entries carry their own headings, so a day, a
+  week or a trip can each be one block.
 - **Search** across titles, notes, subtasks, tags and projects.
 - **Undo** for completions, deletions and edits, backed by the store's log, so
   it survives a restart.
@@ -74,9 +88,8 @@ The app is keyboard-first; the mouse is optional everywhere.
 | `E` | edit the selected task |
 | `Del` | delete |
 | `U` or `Ctrl+Z` | undo |
-| `C` | list ⇄ calendar |
-| `W` | toggle the desktop widget |
-| `1`–`6` | jump to a view |
+| `W` | toggle the sticky note |
+| `1`–`3` | Tasks, Calendar, Habits |
 | `Esc` | close the pane, clear the search, dismiss the overlay |
 | `Ctrl+Shift+Space` | quick-add overlay, from anywhere in Windows |
 
@@ -84,10 +97,13 @@ The app is keyboard-first; the mouse is optional everywhere.
 
 ```
 src/                 frontend — no build step
-  index.html/app.js    main window: views, list, calendar, detail pane
-  quick-add.html/.js   the hotkey overlay
-  widget.html/.js      the desktop widget
-  shared.js            IPC + date formatting shared by all three
+  index.html/app.js    main window: pages, task list, calendar, wiring
+  capture.js           the capture field: parse pills and backspace-to-revert
+  detail.js            the detail pane, its date and priority pickers
+  habits.js            the habit month grid and the month journal
+  quick-add.html/.js   the hotkey overlay, sharing capture.js
+  widget.html/.js      the sticky note
+  shared.js            IPC + date formatting shared by all of them
   styles.css           tokens, light and dark
   overlay.css          the two frameless windows
 src-tauri/
@@ -109,8 +125,9 @@ Deleting that file resets the app.
 
 ## Not yet
 
-- Editing a recurrence rule from the UI — the parser sets it, the detail pane
-  can skip or move an occurrence but cannot change the rule
+- Recurrence rules beyond the repeat picker's seven options — a rule the picker
+  cannot express is shown rather than silently reset, but must be re-typed to
+  change
 - Per-task reminder offsets ("15 minutes before"); reminders fire at the due
   time itself
 - Drag-and-drop reordering, and manual sort orders

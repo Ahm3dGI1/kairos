@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod daily_commands;
 mod reminders;
 mod shell;
 mod state;
@@ -54,9 +55,22 @@ fn main() {
             commands::summary,
             commands::current_month,
             commands::view_counts,
+            daily_commands::agenda,
+            daily_commands::habit_month,
+            daily_commands::toggle_habit,
+            daily_commands::add_habit,
+            daily_commands::rename_habit,
+            daily_commands::delete_habit,
+            daily_commands::set_day_metric,
+            daily_commands::month_journal,
+            daily_commands::save_journal_entry,
+            daily_commands::delete_journal_entry,
+            daily_commands::current_month_pair,
             shell::hide_window,
             shell::toggle_widget_command,
             shell::show_main_window,
+            shell::toggle_sticky_pin,
+            shell::sticky_pinned,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Master Todo");

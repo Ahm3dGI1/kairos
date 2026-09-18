@@ -23,14 +23,20 @@
 //! and the shell supplies one. That holds until multi-device sync forces the
 //! question — see `docs/todo-app-spec.md` §6.
 
+pub mod agenda;
+pub mod daily;
 pub mod filter;
 pub mod parse;
 pub mod recur;
 pub mod store;
 pub mod task;
 
-pub use filter::{Filter, Sort};
-pub use parse::{parse, parse_at, Field, FieldMatch, Guess, ParseResult};
+pub use agenda::{Bucket, Group};
+pub use daily::{DayLog, Habit, HabitId, JournalEntry, MonthJournal};
+pub use filter::{Filter, Narrow, Sort};
+pub use parse::{
+    parse, parse_at, parse_excluding, recurrence_from_phrase, Field, FieldMatch, Guess, ParseResult,
+};
 pub use recur::{complete_occurrence, next_occurrence, occurrences};
 pub use store::{Store, StoreError, UndoKind, Undone};
 pub use task::{

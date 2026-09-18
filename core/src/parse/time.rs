@@ -19,7 +19,7 @@ pub struct TimeMatch {
 
 pub fn extract(tokens: &mut [Token]) -> Option<TimeMatch> {
     for i in 0..tokens.len() {
-        if tokens[i].consumed {
+        if !tokens[i].available() {
             continue;
         }
         if let Some((time, range, guessed)) = match_at(tokens, i) {

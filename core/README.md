@@ -20,8 +20,12 @@ let result = parse_at("gym every day 5pm", now);
 - `recur.rs` — expands a rule into dates, applies exceptions, and advances a
   series on completion
 - `store/` — SQLite persistence with a durable undo log
-- `filter.rs` — the saved views (Today, Overdue, Next N days, project, tag,
-  search) and their sort orders
+- `filter.rs` — the saved views and the narrowing (project, tag, search) the
+  task list applies on top of the agenda
+- `agenda.rs` — grouping everything ahead into Overdue / Today / Tomorrow /
+  Next 7 days / Later / Someday, so every client agrees what "this week" means
+- `daily.rs` — habits, streaks, the hand-entered durations, and the month
+  journal
 
 Ambiguity is resolved by guessing rather than asking, because capture speed is the
 point of the app. Every guess lands in `ParseResult::guesses`, and
@@ -49,6 +53,10 @@ Try it: `cargo run -p mtodo-core --example try_parse -- "gym every day 5pm"`
 A bare number is only a time when something marks it as one — an am/pm suffix, a
 colon, or a preceding "at" — so "call 5 people" keeps its 5.
 
+Any match can be *un-parsed*: `parse_excluding` takes byte ranges to leave as
+plain text, which is what lets the capture field revert a phrase on backspace
+instead of deleting a character.
+
 ## Not yet
 
 - The sync client (waiting on `/sync-server`)
@@ -61,7 +69,7 @@ colon, or a preceding "at" — so "call 5 people" keeps its 5.
 ## Commands
 
 ```sh
-cargo test -p mtodo-core                  # 58 tests: corpus, recurrence, store
+cargo test -p mtodo-core                  # 79 tests: corpus, recurrence, agenda, store
 cargo clippy --workspace --all-targets
 cargo fmt
 ```

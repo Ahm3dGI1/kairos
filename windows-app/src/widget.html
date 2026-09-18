@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Master Todo widget</title>
+    <title>Master Todo — sticky note</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="overlay.css" />
   </head>
@@ -11,8 +11,9 @@
     <header class="widget-head" data-tauri-drag-region>
       <strong data-tauri-drag-region>Today</strong>
       <span id="summary" data-tauri-drag-region></span>
+      <button id="pin" type="button" title="Keep above other windows">📌</button>
       <button id="open" type="button" title="Open Master Todo">↗</button>
-      <button id="close" type="button" title="Hide widget">✕</button>
+      <button id="close" type="button" title="Hide sticky note">✕</button>
     </header>
     <ul id="list" class="widget-list"></ul>
     <script type="module" src="widget.js"></script>

@@ -5,6 +5,8 @@
 //! browser tab — spec §4, "Windows-specific UX". Nothing here knows what a task
 //! is; it only decides which window the user is looking at.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{TrayIconBuilder, TrayIconEvent},
@@ -42,12 +44,14 @@ fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
         .visible(false)
         .build()?;
 
+    // The sticky note behaves like any other window: focus something else and
+    // it drops behind, the way a note on the desk does. Pinning it is the
+    // deliberate act that puts it above everything — see `toggle_sticky_pin`.
     WebviewWindowBuilder::new(app, "widget", WebviewUrl::App("widget.html".into()))
-        .title("Master Todo widget")
+        .title("Master Todo — sticky note")
         .inner_size(320.0, 420.0)
         .decorations(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
+        .skip_taskbar(false)
         .resizable(true)
         .focused(false)
         .visible(false)
@@ -59,7 +63,7 @@ fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
 fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let open = MenuItem::with_id(app, "open", "Open Master Todo", true, None::<&str>)?;
     let quick = MenuItem::with_id(app, "quick", "Quick add\tCtrl+Shift+Space", true, None::<&str>)?;
-    let widget = MenuItem::with_id(app, "widget", "Toggle desktop widget", true, None::<&str>)?;
+    let widget = MenuItem::with_id(app, "widget", "Toggle sticky note", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quick, &widget, &separator, &quit])?;
@@ -131,8 +135,9 @@ pub fn toggle_widget(app: &AppHandle) {
         return;
     }
     let _ = window.show();
+    let _ = window.set_always_on_top(PINNED.load(Ordering::Relaxed));
 
-    // The widget is for glancing at, not working in, so it must not take the
+    // The note is for glancing at, not working in, so it must not take the
     // keyboard from whatever the user was doing. Showing a window focuses it on
     // Windows, so hand focus straight back to the main window when that is
     // where the user was.
@@ -141,6 +146,29 @@ pub fn toggle_widget(app: &AppHandle) {
             let _ = main.set_focus();
         }
     }
+}
+
+/// Whether the sticky note is currently pinned above other windows.
+static PINNED: AtomicBool = AtomicBool::new(false);
+
+/// Flips the pin and returns the new state.
+///
+/// Unpinned, the note is an ordinary window and falls behind whatever you focus
+/// next. Pinned, it stays above everything — which is useful and intrusive in
+/// equal measure, so it is never the default.
+#[tauri::command]
+pub fn toggle_sticky_pin(app: AppHandle) -> bool {
+    let pinned = !PINNED.load(Ordering::Relaxed);
+    PINNED.store(pinned, Ordering::Relaxed);
+    if let Some(window) = app.get_webview_window("widget") {
+        let _ = window.set_always_on_top(pinned);
+    }
+    pinned
+}
+
+#[tauri::command]
+pub fn sticky_pinned() -> bool {
+    PINNED.load(Ordering::Relaxed)
 }
 
 /// Hides a window rather than destroying it — used by the overlay's Escape key

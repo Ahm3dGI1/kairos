@@ -10,19 +10,13 @@ body.overlay {
   overflow: hidden;
 }
 
-body.overlay #line {
-  width: 100%;
+/* The overlay's field is the shared capture field at a larger size, so the
+   pills and the revert behave identically to the main window. */
+body.overlay .overlay-field .highlight-layer,
+body.overlay .overlay-field input {
   padding: 12px 14px;
   font-size: 17px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  outline: none;
-}
-
-body.overlay #line:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  line-height: 24px;
 }
 
 body.widget {
@@ -100,4 +94,17 @@ body.widget {
   text-align: center;
   color: var(--text-faint);
   font-size: 12px;
+}
+
+/* The pin reads as off until it is on, so the note's state is visible at a
+   glance rather than something you have to remember. */
+.widget-head #pin {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+.widget-head #pin.on {
+  opacity: 1;
+  filter: none;
+  background: var(--accent-soft);
 }

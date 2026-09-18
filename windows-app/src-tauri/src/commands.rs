@@ -6,7 +6,7 @@
 //! and a future Linux client out of step.
 
 use chrono::{Datelike, Local, NaiveDate};
-use mtodo_core::{parse_at, recur, Filter, Priority, Sort, Store, Task, TaskId};
+use mtodo_core::{parse_excluding, recur, Field, Filter, Priority, Sort, Store, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
@@ -14,9 +14,9 @@ use crate::state::{notify_changed, AppState};
 
 /// Commands report failure as a string: the frontend shows it and moves on,
 /// and there is nothing it could do differently with a richer type.
-type CmdResult<T> = Result<T, String>;
+pub type CmdResult<T> = Result<T, String>;
 
-fn today() -> NaiveDate {
+pub fn today() -> NaiveDate {
     Local::now().date_naive()
 }
 
@@ -35,7 +35,7 @@ pub struct TaskView {
 }
 
 impl TaskView {
-    fn new(task: Task, today: NaiveDate) -> Self {
+    pub fn new(task: Task, today: NaiveDate) -> Self {
         Self {
             next: if task.is_recurring() {
                 recur::next_occurrence(&task, today).or(task.due)
@@ -51,7 +51,7 @@ impl TaskView {
 }
 
 /// Runs `f` with the store locked, then tells every window to refresh.
-fn with_store<T>(
+pub fn with_store<T>(
     app: &AppHandle,
     state: &State<'_, AppState>,
     f: impl FnOnce(&mut Store) -> Result<T, mtodo_core::StoreError>,
@@ -64,7 +64,7 @@ fn with_store<T>(
 }
 
 /// Reads from the store without announcing a change.
-fn read_store<T>(
+pub fn read_store<T>(
     state: &State<'_, AppState>,
     f: impl FnOnce(&Store) -> Result<T, mtodo_core::StoreError>,
 ) -> CmdResult<T> {
@@ -90,6 +90,29 @@ pub fn get_task(state: State<'_, AppState>, id: TaskId) -> CmdResult<Option<Task
     Ok(task.map(|t| TaskView::new(t, today)))
 }
 
+/// A stretch of the input the parser claimed, so the capture field can outline
+/// it and hand it back to be reverted.
+#[derive(Serialize)]
+pub struct PreviewSpan {
+    /// "date", "time", "recurrence", "tag", "project" or "priority".
+    field: &'static str,
+    start: usize,
+    end: usize,
+    text: String,
+}
+
+fn field_name(field: Field) -> &'static str {
+    match field {
+        Field::Title => "title",
+        Field::Date => "date",
+        Field::Time => "time",
+        Field::Recurrence => "recurrence",
+        Field::Tag => "tag",
+        Field::Project => "project",
+        Field::Priority => "priority",
+    }
+}
+
 /// What the parser made of a line, for the live preview under the input.
 #[derive(Serialize)]
 pub struct Preview {
@@ -102,11 +125,21 @@ pub struct Preview {
     tags: Vec<String>,
     /// Inferences worth showing, e.g. that "5" was read as 17:00.
     guesses: Vec<String>,
+    /// Where each field came from, in byte offsets into the line.
+    spans: Vec<PreviewSpan>,
+}
+
+/// Byte ranges the user has reverted to plain text, as [start, end] pairs.
+type Excluded = Vec<(usize, usize)>;
+
+fn ranges(excluded: &Excluded) -> Vec<std::ops::Range<usize>> {
+    excluded.iter().map(|(start, end)| *start..*end).collect()
 }
 
 #[tauri::command]
-pub fn preview_line(line: String) -> Preview {
-    let result = parse_at(&line, Local::now().naive_local());
+pub fn preview_line(line: String, excluded: Option<Excluded>) -> Preview {
+    let excluded = excluded.unwrap_or_default();
+    let result = parse_excluding(&line, Local::now().naive_local(), &ranges(&excluded));
     let task = &result.task;
     Preview {
         title: task.title.clone(),
@@ -117,6 +150,16 @@ pub fn preview_line(line: String) -> Preview {
         project: task.project.clone(),
         tags: task.tags.clone(),
         guesses: result.guesses.iter().map(|g| g.note.clone()).collect(),
+        spans: result
+            .matches
+            .iter()
+            .map(|m| PreviewSpan {
+                field: field_name(m.field),
+                start: m.span.start,
+                end: m.span.end,
+                text: m.text.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -126,11 +169,15 @@ pub fn quick_add(
     app: AppHandle,
     state: State<'_, AppState>,
     line: String,
+    excluded: Option<Excluded>,
 ) -> CmdResult<Option<TaskView>> {
     if line.trim().is_empty() {
         return Ok(None);
     }
-    let task = parse_at(&line, Local::now().naive_local()).task;
+    // The same exclusions the preview used, so what is committed is exactly
+    // what the capture field was showing.
+    let excluded = ranges(&excluded.unwrap_or_default());
+    let task = parse_excluding(&line, Local::now().naive_local(), &excluded).task;
     // A line that parses to nothing but structure still needs a name.
     let task = if task.title.trim().is_empty() {
         let mut task = task;
@@ -182,6 +229,8 @@ pub struct Edit {
     priority: Option<String>,
     project: Option<Option<String>>,
     tags: Option<Vec<String>>,
+    /// A recurrence phrase ("every monday"), or null to clear the rule.
+    recurrence: Option<Option<String>>,
 }
 
 #[tauri::command]
@@ -211,6 +260,15 @@ pub fn update_task(app: AppHandle, state: State<'_, AppState>, edit: Edit) -> Cm
             task.tags.clear();
             for tag in tags {
                 task.add_tag(tag);
+            }
+        }
+        if let Some(phrase) = edit.recurrence {
+            task.recurrence = phrase
+                .filter(|p| !p.trim().is_empty())
+                .and_then(|p| mtodo_core::recurrence_from_phrase(&p));
+            // A rule needs somewhere to start counting from.
+            if task.recurrence.is_some() && task.due.is_none() {
+                task.due = Some(today);
             }
         }
         store.save(&task)?;

@@ -9,52 +9,93 @@
   <body>
     <div id="error-bar" hidden></div>
 
-    <header class="capture">
+    <!-- Capture belongs to the task and calendar pages; the habit month hides it. -->
+    <header id="capture" class="capture">
       <div class="capture-row">
-        <input
-          id="quick-add"
-          type="text"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="gym every day 5pm  @health  #fitness  !p1"
-          aria-label="Add a task in one line"
-        />
+        <!-- The input sits over a mirror layer that paints a pill behind every
+             phrase the parser claimed. -->
+        <div class="capture-field">
+          <div id="highlight" class="highlight-layer" aria-hidden="true"></div>
+          <input
+            id="quick-add"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="gym every day 5pm  @health  #fitness  !p1"
+            aria-label="Add a task in one line"
+          />
+        </div>
         <button id="add-button" class="primary" type="button">Add</button>
       </div>
       <div id="preview" class="preview" aria-live="polite"></div>
     </header>
 
-    <div class="body">
-      <nav class="sidebar" aria-label="Views">
-        <ul id="views" class="view-list"></ul>
+    <nav class="pages" aria-label="Pages">
+      <div class="segmented" role="group">
+        <button id="page-agenda" class="active" type="button">Tasks</button>
+        <button id="page-calendar" type="button">Calendar</button>
+        <button id="page-habits" type="button">Habits</button>
+      </div>
 
+      <div class="page-tools">
+        <input id="search" type="search" placeholder="Search…  (/)" aria-label="Search tasks" />
+        <label class="toggle">
+          <input id="show-completed" type="checkbox" />
+          Completed
+        </label>
+      </div>
+    </nav>
+
+    <div class="body">
+      <nav class="sidebar" aria-label="Filters">
+        <ul id="filters" class="view-list"></ul>
         <h2 class="side-heading">Projects</h2>
         <ul id="projects" class="view-list"></ul>
-
         <h2 class="side-heading">Tags</h2>
         <ul id="tags" class="view-list"></ul>
       </nav>
 
       <main class="content">
-        <div class="content-head">
-          <h1 id="view-title">Today</h1>
-          <div class="content-tools">
-            <input
-              id="search"
-              type="search"
-              placeholder="Search…  (/)"
-              aria-label="Search tasks"
-            />
-            <div class="segmented" role="group" aria-label="Layout">
-              <button id="tab-list" class="active" type="button">List</button>
-              <button id="tab-calendar" type="button">Calendar</button>
-            </div>
-          </div>
+        <!-- Tasks: one list, grouped by when things are due. -->
+        <div id="agenda-page" class="page">
+          <ul id="agenda" class="tasks" tabindex="0" aria-label="Tasks"></ul>
+          <p id="empty" class="empty" hidden></p>
         </div>
 
-        <ul id="task-list" class="tasks" tabindex="0" aria-label="Tasks"></ul>
-        <div id="calendar" class="calendar" hidden></div>
-        <p id="empty" class="empty" hidden></p>
+        <div id="calendar-page" class="page" hidden>
+          <div id="calendar" class="calendar"></div>
+        </div>
+
+        <!-- Habits: a month at a time, habits down the side, days across. -->
+        <div id="habits-page" class="page habits-page" hidden>
+          <div class="month-head">
+            <button id="month-prev" type="button" title="Previous month">‹</button>
+            <strong id="month-label">—</strong>
+            <button id="month-next" type="button" title="Next month">›</button>
+            <button id="month-today" type="button">This month</button>
+          </div>
+
+          <div class="habit-columns">
+            <section class="habit-grid-wrap" aria-label="Habit grid">
+              <div id="habit-grid" class="habit-grid"></div>
+              <input
+                id="new-habit"
+                type="text"
+                class="inline-input new-habit"
+                placeholder="Add a habit…"
+                aria-label="Add a habit"
+              />
+            </section>
+
+            <section class="journal-col" aria-label="Month journal">
+              <div class="journal-head">
+                <h2 class="side-heading">Journal</h2>
+                <button id="add-entry" class="ghost" type="button">+ Entry</button>
+              </div>
+              <div id="journal-entries" class="journal-entries"></div>
+            </section>
+          </div>
+        </div>
       </main>
 
       <aside id="detail" class="detail" hidden aria-label="Task detail"></aside>
@@ -66,11 +107,10 @@
       <span><kbd>J</kbd>/<kbd>K</kbd> move</span>
       <span><kbd>Space</kbd> complete</span>
       <span><kbd>Enter</kbd> details</span>
-      <span><kbd>E</kbd> edit</span>
       <span><kbd>Del</kbd> delete</span>
       <span><kbd>U</kbd> undo</span>
-      <span><kbd>C</kbd> calendar</span>
-      <span><kbd>W</kbd> widget</span>
+      <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pages</span>
+      <span><kbd>W</kbd> sticky note</span>
       <span class="spacer"></span>
       <span id="summary"></span>
     </footer>

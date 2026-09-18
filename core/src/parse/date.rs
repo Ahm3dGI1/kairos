@@ -20,7 +20,7 @@ pub struct DateMatch {
 
 pub fn extract(tokens: &mut [Token], today: NaiveDate) -> Option<DateMatch> {
     for i in 0..tokens.len() {
-        if tokens[i].consumed {
+        if !tokens[i].available() {
             continue;
         }
         if let Some((date, len, guesses)) = match_at(tokens, i, today) {

@@ -1,8 +1,10 @@
-// The always-visible desktop widget.
+// The sticky note.
 //
-// Spec §4: "non-intrusive, doesn't obscure active work". So it is small, it is
-// read-mostly — the one thing you can do here is tick something off — and it
-// never steals focus.
+// Small, read-mostly — the one thing you can do here is tick something off —
+// and it never steals focus. By default it behaves like any other window and
+// drops behind whatever you focus next; the pin makes it stay on top, which is
+// a deliberate choice rather than the default because always-on-top is
+// intrusive by nature.
 
 import { call, clear, el, formatDue, formatTime, invoke, listen, shortTime, today } from './shared.js';
 
@@ -55,7 +57,21 @@ document.getElementById('close').addEventListener('click', () =>
   invoke('hide_window', { label: 'widget' }),
 );
 
-listen('tasks-changed', refresh);
+const pin = document.getElementById('pin');
+
+function showPin(pinned) {
+  pin.classList.toggle('on', pinned);
+  pin.title = pinned ? 'Unpin — let other windows cover it' : 'Pin above other windows';
+  pin.setAttribute('aria-pressed', String(pinned));
+}
+
+pin.addEventListener('click', async () => {
+  showPin(Boolean(await call('toggle_sticky_pin', undefined, 'Pin')));
+});
+
+call('sticky_pinned', undefined, 'Pin').then((pinned) => showPin(Boolean(pinned)));
+
+listen('data-changed', refresh);
 refresh();
 
 // Catch the date rolling over while the widget sits open for days.

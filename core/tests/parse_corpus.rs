@@ -364,6 +364,39 @@ fn a_named_start_date_anchors_the_series() {
 }
 
 #[test]
+fn a_parse_can_be_reverted_to_plain_text() {
+    // The capture field highlights what it recognized; pressing backspace on a
+    // highlight hands its range back as excluded, and the words stay in the
+    // title instead of becoming a field.
+    let input = "write about my monday every week";
+
+    let parsed = parse_at(input, now());
+    assert_eq!(parsed.task.title, "write about my");
+    assert_eq!(parsed.task.due, date(2026, 9, 14));
+    let monday = parsed.matched(Field::Date).expect("a date match").span.clone();
+    assert_eq!(&input[monday.clone()], "monday");
+
+    // Revert just the date; the recurrence it sat beside is untouched.
+    let reverted = mtodo_core::parse_excluding(input, now(), &[monday]);
+    assert_eq!(reverted.task.title, "write about my monday");
+    assert_eq!(reverted.task.recurrence, Some(Recurrence::Weekly { days: WeekdaySet::EMPTY }));
+    assert!(reverted.matched(Field::Date).is_none());
+}
+
+#[test]
+fn reverting_every_span_leaves_the_line_exactly_as_typed() {
+    let input = "gym every day 5pm";
+    let parsed = parse_at(input, now());
+    let spans: Vec<_> = parsed.matches.iter().map(|m| m.span.clone()).collect();
+
+    let reverted = mtodo_core::parse_excluding(input, now(), &spans);
+    assert_eq!(reverted.task.title, input);
+    assert_eq!(reverted.task.recurrence, None);
+    assert_eq!(reverted.task.time, None);
+    assert_eq!(reverted.task.due, None);
+}
+
+#[test]
 fn matches_point_back_at_the_input() {
     let input = "gym every day 5pm";
     let result = parse_at(input, now());

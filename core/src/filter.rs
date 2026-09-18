@@ -95,6 +95,37 @@ fn matches_text(task: &Task, needle: &str) -> bool {
         || task.project.as_deref().is_some_and(|p| p.to_lowercase().contains(&needle))
 }
 
+/// Narrowing applied on top of the agenda: a project, a tag, a search, or any
+/// combination.
+///
+/// Separate from [`Filter`] because it deliberately says nothing about
+/// completion — the agenda decides that on its own, so that searching with
+/// completed work shown finds completed work too.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Narrow {
+    pub project: Option<String>,
+    pub tag: Option<String>,
+    pub search: Option<String>,
+}
+
+impl Narrow {
+    /// Whether every narrowing term present accepts this task.
+    pub fn matches(&self, task: &Task) -> bool {
+        let project_ok = self.project.as_ref().is_none_or(|name| {
+            task.project.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(name))
+        });
+        let tag_ok = self.tag.as_ref().is_none_or(|tag| task.has_tag(tag));
+        let search_ok = self.search.as_ref().is_none_or(|needle| matches_text(task, needle));
+        project_ok && tag_ok && search_ok
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.project.is_none()
+            && self.tag.is_none()
+            && self.search.as_ref().is_none_or(|s| s.trim().is_empty())
+    }
+}
+
 /// How a view orders its tasks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Sort {

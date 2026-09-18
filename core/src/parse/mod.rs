@@ -25,7 +25,7 @@ use std::ops::Range;
 use chrono::{Local, NaiveDateTime};
 
 use crate::task::Task;
-use token::{span_text, tokenize, Token};
+use token::{span_text, tokenize_excluding, Token};
 
 /// A field of [`Task`] that the parser can fill in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +90,16 @@ pub fn parse(input: &str) -> ParseResult {
 /// Parses a line against an explicit "now" — the entry point tests use, and the
 /// one to prefer anywhere the caller already knows the user's local time.
 pub fn parse_at(input: &str, now: NaiveDateTime) -> ParseResult {
-    let mut tokens = tokenize(input);
+    parse_excluding(input, now, &[])
+}
+
+/// Parses a line, leaving the given byte ranges as plain text.
+///
+/// This is what makes an automatic parse undoable: the capture field highlights
+/// what it recognized, and pressing backspace on a highlight hands that range
+/// back here as excluded, so the words stay in the title instead.
+pub fn parse_excluding(input: &str, now: NaiveDateTime, excluded: &[Range<usize>]) -> ParseResult {
+    let mut tokens = tokenize_excluding(input, excluded);
     let mut result = ParseResult {
         task: Task::new("", now.date()),
         input: input.to_string(),
@@ -162,6 +171,16 @@ pub fn parse_at(input: &str, now: NaiveDateTime) -> ParseResult {
 
     result.task.title = title_from(&tokens);
     result
+}
+
+/// Reads a bare recurrence phrase — "every day", "every monday" — as a rule.
+///
+/// The detail pane's repeat picker uses this rather than mapping its own menu
+/// onto rule variants, so the picker and the typed line can never disagree
+/// about what "every other week" means.
+pub fn recurrence_from_phrase(phrase: &str) -> Option<crate::task::Recurrence> {
+    let mut tokens = tokenize_excluding(phrase, &[]);
+    recurrence::extract(&mut tokens).map(|(rule, _)| rule)
 }
 
 /// Prepositions that only made sense as part of a phrase the extractors took;

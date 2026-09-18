@@ -20,7 +20,7 @@ pub fn extract(tokens: &mut [Token]) -> Markers {
     let mut found = Markers::default();
 
     for i in 0..tokens.len() {
-        if tokens[i].consumed {
+        if !tokens[i].available() {
             continue;
         }
         let text = tokens[i].text.clone();
