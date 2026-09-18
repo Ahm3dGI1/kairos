@@ -52,15 +52,26 @@ Rationale: one maintainer, one shared core depended on by every client — a mon
 - Recurring task exceptions — reschedule or skip a single occurrence without breaking the series
 
 ### Views & navigation
-- Calendar view of tasks
-- Quick filters (e.g. Today, Overdue, Next 7 Days, by tag/project)
-- Search across all tasks
+- **One task list, grouped rather than tabbed** — Overdue, Today, Tomorrow, Next 7 days, Later, Someday in a single scroll. Separate Today/Overdue/Next-7 tabs made the user do the sorting; the buckets are headings, not destinations. Completed work is a toggle.
+- Narrowing by project or tag, and search across all tasks
+- Calendar view of tasks, with recurrence expanded
 - Keyboard-first navigation throughout
+
+### Capture field behaviour
+- Each phrase the parser claims is highlighted in place in the input
+- **Backspace against a highlight un-parses it**, returning the words to the title — the same gesture that undoes an autoformat in a document. The parser supports this directly (`parse_excluding`), so no client has to re-implement it.
+
+### Habits and journal
+Separate from tasks, because a habit is not a task: a task is done once and gone, while a habit is a question about consistency, and completing one must not remove it.
+
+- A **month grid**: habits as rows, days as columns, one tick per cell. Consistency is not visible one day at a time.
+- **Screen time and sleep** as numeric rows in the same grid, entered by hand — reading them automatically would mean a background agent or a vendor API, which the offline-first, self-hosted model (§3) rules out.
+- A **journal for the month**, not the day. Entries carry their own headings, so a day, a week or a trip can each be one block.
 
 ### Windows-specific UX
 - System tray icon with hover preview / click-to-open
-- Always-visible desktop widget (non-intrusive, doesn't obscure active work)
-- Global hotkey launcher for instant quick-add/quick-open
+- **Sticky note**: a small panel of the day's tasks that behaves like an ordinary window — it drops behind whatever you focus next — with a pin for when it should stay above everything. Always-on-top is intrusive by nature and is never the default.
+- Global hotkey launcher for instant quick-add/quick-open, sharing the capture field with the main window
 
 ### Reliability & trust
 - Offline-first (core requirement, not a fallback)
