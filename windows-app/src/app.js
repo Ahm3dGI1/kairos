@@ -1,25 +1,13 @@
-// Master Todo — main window.
+// Master Todo — main window, Direction B.
 //
-// Three pages: Tasks (one list grouped by when things are due), Calendar, and
-// Habits (a month grid with the month's journal). Capture belongs to the first
-// two; the habit month has nothing to capture into.
+// A rail for the three pages, a mono status line that says where you are and
+// what you can press, the page itself, and a capture bar pinned to the bottom
+// that is always there and never a modal.
 
 import { createCapture } from './capture.js';
 import { renderDetail } from './detail.js';
-import { createHabitMonth } from './habits.js';
-import {
-  call,
-  clear,
-  el,
-  formatDue,
-  formatTime,
-  listen,
-  parseDate,
-  priorityClass,
-  shortTime,
-  toIso,
-  today,
-} from './shared.js';
+import { createHabits } from './habits.js';
+import { call, clear, el, listen, parseDate, toIso, today } from './shared.js';
 
 const PAGES = ['agenda', 'calendar', 'habits'];
 
@@ -33,8 +21,6 @@ const state = {
   rows: [],
   cursor: 0,
   detailId: null,
-  /** Whether the detail pane is showing notes or subtasks. */
-  bodyMode: 'notes',
   todayDate: new Date(),
   month: null,
   projects: [],
@@ -43,11 +29,10 @@ const state = {
 
 const dom = {};
 for (const id of [
-  'capture', 'quick-add', 'highlight', 'add-button', 'preview', 'filters', 'projects',
-  'tags', 'search', 'show-completed', 'agenda', 'empty', 'calendar', 'detail', 'summary',
-  'toast', 'page-agenda', 'page-calendar', 'page-habits', 'agenda-page', 'calendar-page',
-  'habits-page', 'month-prev', 'month-next', 'month-today', 'month-label', 'habit-grid',
-  'new-habit', 'journal-entries', 'add-entry',
+  'error-bar', 'here', 'count', 'status-tools', 'agenda', 'empty', 'agenda-page',
+  'calendar-page', 'cal-dow', 'cal-grid', 'habits-page', 'habit-rows', 'journal',
+  'summary', 'detail', 'toast', 'capture', 'capture-hint', 'preview', 'quick-add',
+  'highlight', 'page-agenda', 'page-calendar', 'page-habits', 'sticky-toggle',
 ]) {
   dom[id] = document.getElementById(id);
 }
@@ -60,20 +45,34 @@ const capture = createCapture({
   previewNode: dom.preview,
   getToday: () => state.todayDate,
   onAdd: (task) => {
-    showToast(`Added “${task.title}”`);
+    toast(`added ${task.title}`);
     refresh();
+  },
+  // On the habits page the same bar writes the day's journal line, or adds a
+  // habit when the line is prefixed with "+".
+  onJournal: async (line) => {
+    if (line.startsWith('+')) {
+      await habits.addHabit(line.slice(1).trim());
+      toast('habit added');
+      return;
+    }
+    await habits.submit(line);
+    toast('noted');
   },
 });
 
 // ---------- habits ----------
 
-const habitMonth = createHabitMonth({
-  grid: dom['habit-grid'],
-  newHabit: dom['new-habit'],
-  entriesNode: dom['journal-entries'],
-  addEntry: dom['add-entry'],
-  label: dom['month-label'],
+const habits = createHabits({
+  rows: dom['habit-rows'],
+  journal: dom.journal,
+  summary: dom.summary,
   getToday: () => state.todayDate,
+  onMonth: (label, count) => {
+    if (state.page !== 'habits') return;
+    dom.here.textContent = label;
+    dom.count.textContent = `${count} habit${count === 1 ? '' : 's'}`;
+  },
 });
 
 // ---------- data ----------
@@ -82,7 +81,7 @@ async function refresh() {
   state.todayDate = (await today()) ?? new Date();
 
   if (state.page === 'habits') {
-    await habitMonth.load();
+    await habits.load();
   } else {
     await loadAgenda();
     if (state.page === 'calendar') await renderCalendar();
@@ -90,9 +89,7 @@ async function refresh() {
 
   state.projects = (await call('projects', undefined, 'Projects')) ?? [];
   state.tags = (await call('tags', undefined, 'Tags')) ?? [];
-  renderSidebar();
-
-  dom.summary.textContent = (await call('summary', undefined, 'Summary')) ?? '';
+  renderStatus();
 }
 
 async function loadAgenda() {
@@ -115,6 +112,103 @@ async function loadAgenda() {
   renderPane();
 }
 
+// ---------- the status line ----------
+
+function renderStatus() {
+  if (state.page === 'habits') return; // the habits module owns its own line
+
+  const open = state.rows.filter((t) => !t.completed_at).length;
+  if (state.page === 'calendar') {
+    const [year, month] = state.month ?? [];
+    dom.here.textContent = year
+      ? new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+          month: 'long',
+          year: 'numeric',
+        })
+      : '';
+    dom.count.textContent = '';
+    renderCalendarTools();
+    return;
+  }
+  dom.here.textContent = state.search
+    ? `search: ${state.search}`
+    : state.project
+      ? `@${state.project}`
+      : state.tag
+        ? `#${state.tag}`
+        : 'everything';
+  dom.count.textContent = `${open} open`;
+  clear(dom['status-tools']);
+
+  // Search is a field that looks like the rest of the line until you use it.
+  const search = el('input', {
+    class: 'search',
+    type: 'search',
+    placeholder: '/ search',
+    value: state.search,
+    'aria-label': 'Search tasks',
+  });
+  let timer = null;
+  search.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      state.search = search.value;
+      state.cursor = 0;
+      refresh();
+    }, 140);
+  });
+  dom['status-tools'].appendChild(search);
+
+  const filters = el('span', { class: 'filters' });
+  const chipFor = (kind, name) =>
+    el('button', {
+      type: 'button',
+      class: state[kind] === name ? 'on' : '',
+      text: kind === 'tag' ? `#${name}` : `@${name}`,
+      // Clicking the active one clears it, so a filter is never a trap.
+      onclick: () => {
+        state[kind] = state[kind] === name ? null : name;
+        state.cursor = 0;
+        refresh();
+      },
+    });
+  for (const name of state.projects.slice(0, 3)) filters.append(' ', chipFor('project', name));
+  for (const name of state.tags.slice(0, 3)) filters.append(' ', chipFor('tag', name));
+  dom['status-tools'].appendChild(filters);
+
+  dom['status-tools'].append(
+    ' ',
+    el('button', {
+      type: 'button',
+      class: state.showCompleted ? 'on' : '',
+      text: 'done',
+      title: 'Show completed',
+      onclick: () => {
+        state.showCompleted = !state.showCompleted;
+        state.cursor = 0;
+        refresh();
+      },
+    }),
+  );
+}
+
+function renderCalendarTools() {
+  clear(dom['status-tools']);
+  dom['status-tools'].append(
+    el('button', { type: 'button', text: '‹ H', onclick: () => stepMonth(-1) }),
+    el('button', {
+      class: 'on',
+      type: 'button',
+      text: 'T today',
+      onclick: () => {
+        state.month = null;
+        renderCalendar();
+      },
+    }),
+    el('button', { type: 'button', text: 'L ›', onclick: () => stepMonth(1) }),
+  );
+}
+
 // ---------- the task list ----------
 
 function renderAgenda() {
@@ -123,8 +217,8 @@ function renderAgenda() {
   if (!state.rows.length) {
     dom.empty.hidden = false;
     dom.empty.textContent = state.search
-      ? 'Nothing matches that search.'
-      : 'Nothing ahead. Press N to add something.';
+      ? 'nothing matches'
+      : 'nothing ahead — press N';
     return;
   }
   dom.empty.hidden = true;
@@ -133,8 +227,9 @@ function renderAgenda() {
   let index = 0;
   for (const group of state.groups) {
     dom.agenda.appendChild(
-      el('li', { class: `group-head group-${group.id}` }, [
-        el('span', { text: group.label }),
+      el('li', { class: `group ${group.id}` }, [
+        el('span', { text: group.label.toUpperCase() }),
+        el('span', { class: 'rule' }),
         el('span', { class: 'count', text: String(group.tasks.length) }),
       ]),
     );
@@ -145,103 +240,73 @@ function renderAgenda() {
   }
 }
 
+/** The meta column: one mono line, dot separated, cut rather than wrapped. */
+function metaFor(task, groupId) {
+  const bits = [];
+  if (task.overdue) {
+    const days = Math.round((parseDate(task.next ?? task.due) - state.todayDate) / 86400000);
+    bits.push(`${days}d`);
+  } else if (task.time) {
+    bits.push(task.time.slice(0, 5));
+  } else if (!['today', 'tomorrow'].includes(groupId) && (task.next ?? task.due)) {
+    const date = parseDate(task.next ?? task.due);
+    bits.push(date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }));
+  }
+  // p1/p2/p3 reads in a mono column where "medium" does not.
+  const rank = { High: 'p1', Medium: 'p2', Low: 'p3' }[task.priority];
+  if (rank) bits.unshift(rank);
+  if (task.recurrence_label) bits.push(shortRule(task.recurrence_label));
+  if (task.project) bits.push(`@${task.project}`);
+  for (const tag of task.tags ?? []) bits.push(`#${tag}`);
+  if (task.subtasks?.length) bits.push(`${task.subtasks_done}/${task.subtasks.length}`);
+  return bits;
+}
+
+/** "every weekday" reads as "weekdays" in a column this narrow. */
+function shortRule(label) {
+  return label
+    .replace(/^every weekday$/, 'weekdays')
+    .replace(/^every day$/, 'daily')
+    .replace(/^every /, '');
+}
+
 function taskRow(task, index, groupId) {
   const done = Boolean(task.completed_at);
-  const classes = [
-    'task',
-    priorityClass(task.priority),
-    done ? 'done' : '',
-    index === state.cursor ? 'active' : '',
-  ];
+  const classes = ['task'];
+  if (task.overdue) classes.push('late');
+  else if (groupId === 'today') classes.push('now');
+  if (done) classes.push('done');
+  if (index === state.cursor) classes.push('active');
 
   const check = el('button', {
-    class: 'check',
+    class: `check ${done ? 'on' : ''}`.trim(),
     type: 'button',
-    title: done ? 'Mark not done' : 'Complete',
-    text: '✓',
+    'aria-label': `${done ? 'Reopen' : 'Complete'}: ${task.title}`,
     onclick: (event) => {
       event.stopPropagation();
       toggleComplete(task);
     },
   });
 
-  const meta = [];
-  const dueIso = task.next ?? task.due;
-  // The group heading already says "Today"; repeating it per row is noise.
-  if (dueIso && !['today', 'tomorrow'].includes(groupId)) {
-    meta.push(
-      el('span', {
-        class: task.overdue ? 'overdue' : '',
-        text: formatDue(dueIso, state.todayDate),
-      }),
-    );
-  }
-  if (task.time) meta.push(el('span', { text: formatTime(shortTime(task.time)) }));
-  if (task.recurrence_label) meta.push(el('span', { text: `↻ ${task.recurrence_label}` }));
-  if (task.project) meta.push(el('span', { text: `@${task.project}` }));
-  for (const tag of task.tags ?? []) meta.push(el('span', { class: 'tag', text: `#${tag}` }));
-  if (task.subtasks?.length) {
-    meta.push(el('span', { text: `${task.subtasks_done}/${task.subtasks.length}` }));
-  }
-
-  const main = el('div', { class: 'task-main' }, [
-    el('span', { class: 'title', text: task.title }),
-    meta.length ? el('div', { class: 'meta' }, meta) : null,
-  ]);
+  const bits = metaFor(task, groupId);
+  const meta = el('span', { class: 'meta' });
+  bits.forEach((bit, i) => {
+    if (i) meta.append(' · ');
+    // Everything past the first two drops out in a narrow window.
+    meta.appendChild(el('span', { class: i > 1 ? 'extra' : '', text: bit }));
+  });
 
   return el(
     'li',
     {
-      class: classes.filter(Boolean).join(' '),
+      class: classes.join(' '),
       onclick: () => {
         state.cursor = index;
         openDetail(task.id);
       },
     },
-    [check, main],
+    [check, el('span', { class: 'title', text: task.title }), meta],
   );
-}
-
-function renderSidebar() {
-  // The saved filters are the ones that are not about time — time is what the
-  // list's own headings are for.
-  clear(dom.filters);
-  dom.filters.appendChild(
-    el(
-      'li',
-      {
-        class: !state.project && !state.tag ? 'selected' : '',
-        onclick: () => {
-          state.project = null;
-          state.tag = null;
-          refresh();
-        },
-      },
-      [el('span', { text: 'Everything' })],
-    ),
-  );
-
-  renderNamedList(dom.projects, state.projects, 'project', '');
-  renderNamedList(dom.tags, state.tags, 'tag', '#');
-}
-
-function renderNamedList(node, names, kind, prefix) {
-  clear(node);
-  for (const name of names) {
-    const selected = state[kind] === name;
-    node.appendChild(
-      el('li', {
-        class: selected ? 'selected' : '',
-        text: prefix + name,
-        // Clicking the active one clears it, so a filter is never a trap.
-        onclick: () => {
-          state[kind] = selected ? null : name;
-          state.cursor = 0;
-          refresh();
-        },
-      }),
-    );
-  }
 }
 
 // ---------- the detail pane ----------
@@ -267,15 +332,8 @@ function renderPane() {
   }
   dom.detail.hidden = false;
 
-  // Open on whichever body the task actually has something in.
-  const mode = state.bodyMode ?? 'notes';
   renderDetail(dom.detail, task, {
     todayDate: state.todayDate,
-    bodyMode: mode,
-    onBodyMode: (next) => {
-      state.bodyMode = next;
-      renderPane();
-    },
     actions: {
       close: closeDetail,
       edit: (changes) => edit(task.id, changes),
@@ -283,14 +341,14 @@ function renderPane() {
       remove,
       skip: async (t, date) => {
         await call('skip_occurrence', { id: t.id, date }, 'Skip');
-        showToast('Occurrence skipped');
+        toast('Occurrence skipped');
         refresh();
       },
       push: async (t, date) => {
         const next = parseDate(date);
         next.setDate(next.getDate() + 1);
         await call('reschedule_occurrence', { id: t.id, date, to: toIso(next) }, 'Reschedule');
-        showToast('Occurrence moved to the next day');
+        toast('Moved to the next day');
         refresh();
       },
       toggleSubtask: async (t, sub) => {
@@ -312,76 +370,78 @@ async function renderCalendar() {
   if (!year) return;
   state.month = [year, month];
 
-  const days = (await call('calendar_month', { year, month }, 'Calendar')) ?? [];
-  const byDate = new Map(days.map((d) => [d.date, d.tasks]));
-
-  clear(dom.calendar);
-  const label = new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+  dom.here.textContent = new Date(year, month - 1, 1).toLocaleDateString(undefined, {
     month: 'long',
     year: 'numeric',
   });
-  dom.calendar.appendChild(
-    el('div', { class: 'cal-head' }, [
-      el('button', { type: 'button', text: '‹', onclick: () => stepMonth(-1) }),
-      el('strong', { text: label }),
-      el('button', { type: 'button', text: '›', onclick: () => stepMonth(1) }),
-      el('button', {
-        type: 'button',
-        text: 'Today',
-        onclick: () => {
-          state.month = null;
-          renderCalendar();
-        },
-      }),
-    ]),
-  );
 
-  const grid = el('div', { class: 'cal-grid' });
-  for (const name of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
-    grid.appendChild(el('div', { class: 'cal-dow', text: name }));
+  const days = (await call('calendar_month', { year, month }, 'Calendar')) ?? [];
+  const byDate = new Map(days.map((d) => [d.date, d.tasks]));
+
+  clear(dom['cal-dow']);
+  // Sunday-first, as the design has it.
+  for (const name of ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']) {
+    dom['cal-dow'].appendChild(el('span', { text: name }));
   }
 
+  clear(dom['cal-grid']);
   const first = new Date(year, month - 1, 1);
-  // Monday-first grid: JS weeks start on Sunday, so shift by one.
-  const lead = (first.getDay() + 6) % 7;
-  const start = new Date(year, month - 1, 1 - lead);
+  const start = new Date(year, month - 1, 1 - first.getDay());
   const todayIso = toIso(state.todayDate);
 
-  for (let i = 0; i < 42; i += 1) {
+  for (let i = 0; i < 35; i += 1) {
     const date = new Date(start);
     date.setDate(start.getDate() + i);
     const iso = toIso(date);
-    const cell = el('div', {
-      class: [
-        'cal-day',
-        date.getMonth() === month - 1 ? '' : 'other',
-        iso === todayIso ? 'today' : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-    });
-    cell.appendChild(el('div', { class: 'cal-date', text: String(date.getDate()) }));
-    for (const task of byDate.get(iso) ?? []) {
+    const inMonth = date.getMonth() === month - 1;
+    const items = byDate.get(iso) ?? [];
+    const overdue = items.some((t) => t.overdue);
+
+    const classes = ['cal-day'];
+    if (!inMonth) classes.push('other');
+    else if (iso === todayIso) classes.push('today');
+    else if (overdue) classes.push('late');
+
+    const cell = el('div', { class: classes.join(' ') });
+    if (!inMonth) {
+      dom['cal-grid'].appendChild(cell);
+      continue;
+    }
+
+    if (iso === todayIso) {
       cell.appendChild(
-        el('div', {
-          class: 'cal-task',
-          text: task.title,
+        el('div', { class: 'head' }, [
+          el('span', { class: 'num', text: String(date.getDate()) }),
+          items.length ? el('span', { class: 'n', text: String(items.length) }) : null,
+        ]),
+      );
+    } else {
+      cell.appendChild(el('span', { class: 'num', text: String(date.getDate()) }));
+    }
+
+    // Two fit; the rest become a count, which is more honest than a clipped row.
+    for (const task of items.slice(0, 2)) {
+      cell.appendChild(
+        el('span', {
+          class: 'item',
+          text: task.time ? `${task.time.slice(0, 5)} ${task.title}` : task.title,
           title: task.title,
           onclick: () => {
-            // Jump back to the list, where the detail pane lives.
             state.detailId = task.id;
             setPage('agenda');
           },
         }),
       );
     }
-    grid.appendChild(cell);
+    if (items.length > 2) {
+      cell.appendChild(el('span', { class: 'more', text: `+${items.length - 2}` }));
+    }
+    dom['cal-grid'].appendChild(cell);
   }
-  dom.calendar.appendChild(grid);
 }
 
 function stepMonth(delta) {
-  const [year, month] = state.month;
+  const [year, month] = state.month ?? [state.todayDate.getFullYear(), state.todayDate.getMonth() + 1];
   const date = new Date(year, month - 1 + delta, 1);
   state.month = [date.getFullYear(), date.getMonth() + 1];
   renderCalendar();
@@ -393,10 +453,11 @@ async function toggleComplete(task) {
   const command = task.completed_at ? 'uncomplete_task' : 'complete_task';
   const result = await call(command, { id: task.id }, 'Updating task');
   if (result && !task.completed_at) {
-    showToast(
-      result.recurrence_label
-        ? `Done — next ${formatDue(result.next, state.todayDate).toLowerCase()}`
-        : 'Completed  ·  U to undo',
+    toast(
+      result.recurrence_label && result.next
+        ? `${task.title} done — next ${parseDate(result.next).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}`
+        : `${task.title} done`,
+      true,
     );
   }
   refresh();
@@ -405,7 +466,7 @@ async function toggleComplete(task) {
 async function remove(task) {
   await call('delete_task', { id: task.id }, 'Deleting task');
   if (state.detailId === task.id) state.detailId = null;
-  showToast('Deleted  ·  U to undo');
+  toast(`${task.title} deleted`, true);
   refresh();
 }
 
@@ -417,23 +478,36 @@ async function edit(id, changes) {
 async function undo() {
   const result = await call('undo', undefined, 'Undo');
   if (!result) {
-    showToast('Nothing to undo');
+    toast('nothing to undo');
     return;
   }
-  showToast(result.title ? `Undid ${result.label}: “${result.title}”` : `Undid ${result.label}`);
+  toast(result.title ? `undid ${result.label}: ${result.title}` : `undid ${result.label}`);
   refresh();
 }
 
-function showToast(message) {
-  dom.toast.textContent = message;
+/** Every destructive act leaves one, with the key that reverses it. */
+function toast(message, undoable = false) {
+  clear(dom.toast);
+  dom.toast.appendChild(el('span', { text: message }));
+  if (undoable) {
+    dom.toast.appendChild(
+      el('button', { type: 'button', text: 'U undo', onclick: undo }),
+    );
+  }
   dom.toast.hidden = false;
   clearTimeout(dom.toast._timer);
   dom.toast._timer = setTimeout(() => {
     dom.toast.hidden = true;
-  }, 3200);
+  }, 3600);
 }
 
 // ---------- pages ----------
+
+const HINTS = {
+  agenda: 'J K move · X done · U undo',
+  calendar: 'H L month · T today · Enter opens',
+  habits: 'H L month · Space toggles today',
+};
 
 function setPage(page) {
   state.page = page;
@@ -441,35 +515,24 @@ function setPage(page) {
     dom[`page-${name}`].classList.toggle('active', name === page);
     dom[`${name}-page`].hidden = name !== page;
   }
-
-  // Capture is for tasks; the habit month has nothing to capture into.
-  dom.capture.hidden = page === 'habits';
-  // The sidebar, search and detail pane only mean anything on the task list.
-  const tasks = page === 'agenda';
-  document.querySelector('.sidebar').hidden = !tasks;
-  document.querySelector('.page-tools').hidden = !tasks;
-  if (!tasks) dom.detail.hidden = true;
-
+  dom.detail.hidden = page !== 'agenda';
+  dom['capture-hint'].textContent = HINTS[page];
+  // The bar captures a task on two pages and a journal line on the third.
+  dom['quick-add'].placeholder =
+    page === 'habits'
+      ? `note for ${state.todayDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}…   (+name adds a habit)`
+      : 'gym every day 5pm @health #fitness !p1';
+  capture.setMode(page === 'habits' ? 'journal' : 'task');
   refresh();
 }
 
 // ---------- keyboard ----------
 
-/**
- * Whether the focused element should get the keystroke instead of the global
- * shortcuts.
- *
- * Fields are the obvious case, but buttons matter just as much: a single-key
- * shortcut that eats Enter stops every button in the app from being reachable
- * by keyboard, which in a keyboard-first app is a defect rather than a detail.
- * The task list is the deliberate exception — it is focusable precisely so the
- * shortcuts work while it has focus.
- */
 function takesKeys(target) {
   if (!(target instanceof Element) || target === dom.agenda) return false;
   return (
     target.matches('input, textarea, select, button, a[href], [contenteditable="true"]') ||
-    target.closest('.detail, .popover, .journal-entries, .habit-grid') !== null
+    target.closest('.detail, .pop, .journal, .habit-rows') !== null
   );
 }
 
@@ -488,9 +551,8 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     if (typing) {
       event.target.blur();
-      if (event.target === dom.search) {
+      if (event.target.classList?.contains('search')) {
         state.search = '';
-        dom.search.value = '';
         refresh();
       }
     } else if (state.detailId) {
@@ -506,16 +568,32 @@ document.addEventListener('keydown', (event) => {
   }
   if (typing) return;
 
-  switch (event.key.toLowerCase()) {
+  const key = event.key.toLowerCase();
+
+  // H and L step the month on the two pages that have one.
+  if ((key === 'h' || key === 'l') && state.page !== 'agenda') {
+    event.preventDefault();
+    const delta = key === 'h' ? -1 : 1;
+    if (state.page === 'calendar') stepMonth(delta);
+    else habits.step(delta);
+    return;
+  }
+  if (key === 't' && state.page === 'calendar') {
+    event.preventDefault();
+    state.month = null;
+    renderCalendar();
+    return;
+  }
+
+  switch (key) {
     case 'n':
       event.preventDefault();
-      if (state.page === 'habits') setPage('agenda');
       capture.focus();
       break;
     case '/':
       event.preventDefault();
       setPage('agenda');
-      dom.search.focus();
+      dom['status-tools'].querySelector('.search')?.focus();
       break;
     case 'j':
     case 'arrowdown':
@@ -530,7 +608,8 @@ document.addEventListener('keydown', (event) => {
     case ' ':
     case 'x':
       event.preventDefault();
-      if (state.rows[state.cursor]) toggleComplete(state.rows[state.cursor]);
+      if (state.page === 'habits') habits.toggleToday();
+      else if (state.rows[state.cursor]) toggleComplete(state.rows[state.cursor]);
       break;
     case 'enter':
       event.preventDefault();
@@ -550,6 +629,11 @@ document.addEventListener('keydown', (event) => {
       event.preventDefault();
       undo();
       break;
+    case 'r':
+      // Puts back the last phrase taken off with backspace.
+      event.preventDefault();
+      capture.restore();
+      break;
     case 'w':
       event.preventDefault();
       call('toggle_widget_command', undefined, 'Sticky note');
@@ -558,7 +642,7 @@ document.addEventListener('keydown', (event) => {
     case '2':
     case '3':
       event.preventDefault();
-      setPage(PAGES[Number(event.key) - 1]);
+      setPage(PAGES[Number(key) - 1]);
       break;
     default:
       break;
@@ -567,33 +651,13 @@ document.addEventListener('keydown', (event) => {
 
 // ---------- wiring ----------
 
-dom['add-button'].addEventListener('click', () => capture.submit());
-
 for (const name of PAGES) {
   dom[`page-${name}`].addEventListener('click', () => setPage(name));
 }
+dom['sticky-toggle'].addEventListener('click', () =>
+  call('toggle_widget_command', undefined, 'Sticky note'),
+);
 
-dom['month-prev'].addEventListener('click', () => habitMonth.step(-1));
-dom['month-next'].addEventListener('click', () => habitMonth.step(1));
-dom['month-today'].addEventListener('click', () => habitMonth.thisMonth());
-
-let searchTimer = null;
-dom.search.addEventListener('input', () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    state.search = dom.search.value;
-    state.cursor = 0;
-    refresh();
-  }, 140);
-});
-
-dom['show-completed'].addEventListener('change', () => {
-  state.showCompleted = dom['show-completed'].checked;
-  state.cursor = 0;
-  refresh();
-});
-
-// Any window can change the data; all of them re-read when it happens.
 listen('data-changed', () => refresh());
 
 async function boot() {

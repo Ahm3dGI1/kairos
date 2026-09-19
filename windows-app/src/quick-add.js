@@ -1,17 +1,16 @@
 // The hotkey overlay: one field, one job.
 //
 // Ctrl+Shift+Space summons it from anywhere. Type a line, press Enter, it is
-// gone — capture speed is the entire point, so nothing here ever asks a
-// follow-up question.
-//
-// It shares its field with the main window, so the parsed phrases get the same
-// pills and the same backspace-to-revert.
+// gone. It shares its field with the main window, so the parsed phrases get the
+// same tints and the same backspace-to-revert.
 
 import { createCapture } from './capture.js';
-import { invoke, listen, today } from './shared.js';
+import { el, invoke, listen, today } from './shared.js';
 
 const input = document.getElementById('line');
+const previewNode = document.getElementById('preview');
 let todayDate = new Date();
+let keepOpen = false;
 
 async function hide() {
   await invoke('hide_window', { label: 'quick-add' });
@@ -20,18 +19,23 @@ async function hide() {
 const capture = createCapture({
   input,
   layer: document.getElementById('highlight'),
-  previewNode: document.getElementById('preview'),
+  previewNode,
   getToday: () => todayDate,
   onAdd: () => {
-    // Shift was held for a run of captures, so stay open for the next one.
     if (!keepOpen) hide();
     keepOpen = false;
   },
 });
 
-// Enter is handled inside the capture field; this only records whether the
-// overlay should survive it.
-let keepOpen = false;
+// The keys this window answers to, shown where the preview row ends.
+function addHint() {
+  if (previewNode.querySelector('.hint')) return;
+  previewNode.appendChild(
+    el('span', { class: 'hint', text: 'Enter add · Shift+Enter keep open · Esc dismiss' }),
+  );
+}
+new MutationObserver(addHint).observe(previewNode, { childList: true });
+
 input.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     event.preventDefault();
@@ -39,12 +43,15 @@ input.addEventListener('keydown', (event) => {
     return;
   }
   if (event.key === 'Enter') keepOpen = event.shiftKey;
+  if (event.key.toLowerCase() === 'r' && event.ctrlKey) {
+    event.preventDefault();
+    capture.restore();
+  }
 });
 
 // Losing focus means the user moved on; get out of the way.
 window.addEventListener('blur', () => hide());
 
-// Re-focus and reset every time the hotkey summons it.
 listen('quick-add-opened', async () => {
   todayDate = (await today()) ?? new Date();
   capture.reset();

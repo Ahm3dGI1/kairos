@@ -1,110 +1,177 @@
-/* The two frameless windows: the hotkey overlay and the desktop widget.
-   Both are borderless, so they draw their own edge and drag region. */
+/* The two frameless windows: the hotkey overlay and the sticky note.
+   Both draw their own edge and shadow, because they float over other apps. */
 
 body.overlay {
+  display: block;
   padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+  background: var(--raised);
+  border: 1px solid var(--edge-strong);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 75%);
   overflow: hidden;
 }
 
-/* The overlay's field is the shared capture field at a larger size, so the
-   pills and the revert behave identically to the main window. */
-body.overlay .overlay-field .highlight-layer,
-body.overlay .overlay-field input {
-  padding: 12px 14px;
-  font-size: 17px;
-  line-height: 24px;
+body.overlay .capture {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  gap: 11px;
 }
 
-body.widget {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+body.overlay .capture .prompt {
+  font-size: 16px;
+  color: var(--accent);
 }
 
-.widget-head {
+/* The overlay is the same field, one size up. */
+body.overlay .highlight-layer,
+body.overlay #line {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+body.overlay .preview {
+  padding: 11px 0 0 27px;
+  background: transparent;
+}
+
+body.overlay .preview .hint {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-fainter);
+}
+
+/* ---------- the sticky note ---------- */
+
+body.sticky {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  box-shadow: 0 16px 44px rgb(0 0 0 / 60%);
+  overflow: hidden;
+}
+
+.sticky-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 9px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
   cursor: grab;
+  flex: 0 0 auto;
 }
 
-.widget-head span {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-faint);
+.sticky-head .label {
+  letter-spacing: 0.14em;
+  color: var(--accent);
 }
 
-.widget-head button {
-  border: none;
+.sticky-head .counts {
+  color: var(--text-fainter);
+}
+
+.sticky-head .spacer {
+  flex-grow: 1;
+}
+
+.sticky-head button {
+  border: 0;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-fainter);
+  padding: 2px;
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
+  display: inline-flex;
 }
 
-.widget-head button:hover {
-  background: var(--surface-2);
-  color: var(--text);
+.sticky-head button:hover {
+  color: var(--text-2);
 }
 
-.widget-list {
+.sticky-head button.on {
+  color: var(--accent);
+}
+
+.sticky-list {
+  flex-grow: 1;
+  min-height: 0;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
   list-style: none;
   margin: 0;
-  padding: 6px;
-  overflow-y: auto;
-  height: calc(100vh - 42px);
 }
 
-.widget-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 13px;
+.sticky-list li {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 0 10px;
+  align-items: center;
+  height: 26px;
 }
 
-.widget-list li:hover {
-  background: var(--surface-2);
+.sticky-list .check {
+  width: 11px;
+  height: 11px;
 }
 
-.widget-list .when {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-faint);
+.sticky-list .title {
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.widget-list .when.overdue {
+.sticky-list .when {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.sticky-list li.late .title {
+  color: var(--text-bright);
+}
+
+.sticky-list li.late .when {
   color: var(--danger);
-  font-weight: 600;
 }
 
-.widget-empty {
-  padding: 20px 12px;
+.sticky-list li.late .check {
+  border-color: var(--danger-check);
+}
+
+.sticky-list li.now .check {
+  border-color: var(--check);
+}
+
+.sticky-list li.done {
+  opacity: 0.4;
+}
+
+.sticky-list li.done .title {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.sticky-foot {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-quiet);
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  flex: 0 0 auto;
+}
+
+.sticky-empty {
+  padding: 18px 0;
   text-align: center;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-/* The pin reads as off until it is on, so the note's state is visible at a
-   glance rather than something you have to remember. */
-.widget-head #pin {
-  opacity: 0.45;
-  filter: grayscale(1);
-}
-
-.widget-head #pin.on {
-  opacity: 1;
-  filter: none;
-  background: var(--accent-soft);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-ghost);
 }

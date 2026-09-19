@@ -34,7 +34,7 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     WebviewWindowBuilder::new(app, "quick-add", WebviewUrl::App("quick-add.html".into()))
         .title("Quick add")
-        .inner_size(680.0, 132.0)
+        .inner_size(680.0, 124.0)
         .decorations(false)
         .transparent(false)
         .always_on_top(true)
@@ -49,7 +49,7 @@ fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
     // deliberate act that puts it above everything — see `toggle_sticky_pin`.
     WebviewWindowBuilder::new(app, "widget", WebviewUrl::App("widget.html".into()))
         .title("Master Todo — sticky note")
-        .inner_size(320.0, 420.0)
+        .inner_size(300.0, 360.0)
         .decorations(false)
         .skip_taskbar(false)
         .resizable(true)

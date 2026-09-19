@@ -8,16 +8,19 @@
   </head>
   <body class="overlay">
     <div id="error-bar" hidden></div>
-    <div class="capture-field overlay-field">
-      <div id="highlight" class="highlight-layer" aria-hidden="true"></div>
-      <input
-        id="line"
-        type="text"
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="What needs doing?  —  Enter to add, Esc to dismiss"
-        aria-label="Add a task"
-      />
+    <div class="capture">
+      <span class="prompt">›</span>
+      <div class="capture-field">
+        <div id="highlight" class="highlight-layer" aria-hidden="true"></div>
+        <input
+          id="line"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="what needs doing?"
+          aria-label="Add a task"
+        />
+      </div>
     </div>
     <div id="preview" class="preview" aria-live="polite"></div>
     <script type="module" src="quick-add.js"></script>

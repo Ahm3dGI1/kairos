@@ -1,19 +1,16 @@
-// The habit month.
+// The habit month, Direction B.
 //
-// One month at a time: habits down the side, days across the top, a tick in
-// each cell. A month is the right window because a habit is a question about
-// consistency, and you cannot see consistency one day at a time.
+// A contribution grid: one row per habit, one square per day, filled when done
+// and hollow-red when missed. A month is the right window because a habit is a
+// question about consistency, and consistency is invisible one day at a time.
 //
-// The journal beside it belongs to the whole month, not to any single day —
-// entries carry their own headings, so a day, a week or a trip can each be one
-// block.
+// Under it, the month's journal as a log — date on the left, the line on the
+// right — and a summary of how the month actually went.
 
-import { call, clear, el, toIso } from './shared.js';
+import { call, clear, el, parseDate, toIso } from './shared.js';
 
-const DURATION_HINT = '7h30, 7.5h or 450';
-
-export function createHabitMonth({ grid, newHabit, entriesNode, addEntry, label, getToday }) {
-  /** The month on screen, as [year, month]; null means the current one. */
+export function createHabits({ rows, journal, summary, getToday, onMonth }) {
+  /** The month on screen as [year, month]; null means the current one. */
   let shown = null;
   let data = null;
 
@@ -25,77 +22,58 @@ export function createHabitMonth({ grid, newHabit, entriesNode, addEntry, label,
     const [year, month] = shown;
     data = await call('habit_month', { year, month }, 'Habits');
     if (!data) return;
-    label.textContent = data.label;
+
+    onMonth?.(data.label, data.habits.length);
     renderGrid();
     await renderJournal();
   }
 
   function step(delta) {
-    const [year, month] = shown;
+    const [year, month] = shown ?? [getToday().getFullYear(), getToday().getMonth() + 1];
     const date = new Date(year, month - 1 + delta, 1);
     shown = [date.getFullYear(), date.getMonth() + 1];
-    load();
-  }
-
-  function thisMonth() {
-    shown = null;
     load();
   }
 
   // ---------- the grid ----------
 
   function renderGrid() {
-    clear(grid);
-    // One column for the name, one per day, one for the row total.
-    grid.style.setProperty('--days', String(data.days.length));
+    clear(rows);
 
-    grid.appendChild(el('div', { class: 'cell corner', text: '' }));
+    // A ruler rather than a label per day: every fifth number, dots between.
+    const ruler = el('div', { class: 'habit-row' }, [
+      el('div', { class: 'habit-name' }),
+      el('div', { class: 'day-nums' }),
+    ]);
+    const nums = ruler.querySelector('.day-nums');
     for (const day of data.days) {
-      const classes = ['cell', 'day-head'];
-      if (day.is_today) classes.push('today');
-      if (day.is_weekend) classes.push('weekend');
-      grid.appendChild(
-        el('div', { class: classes.join(' '), title: day.date }, [
-          el('span', { class: 'dow', text: day.weekday }),
-          el('span', { class: 'dom', text: String(day.day) }),
-        ]),
-      );
-    }
-    grid.appendChild(el('div', { class: 'cell total-head', text: '✓' }));
-
-    for (const habit of data.habits) {
-      grid.appendChild(habitName(habit));
-      habit.done.forEach((done, index) => {
-        grid.appendChild(tickCell(habit, data.days[index], done));
-      });
-      grid.appendChild(
-        el('div', { class: 'cell total', title: `${habit.count} this month` }, [
-          el('span', { text: String(habit.count) }),
-          habit.streak > 0 ? el('span', { class: 'streak', text: `${habit.streak}d` }) : null,
-        ]),
-      );
-    }
-
-    if (!data.habits.length) {
-      grid.appendChild(
-        el('div', {
-          class: 'cell empty-row',
-          style: `grid-column: 1 / span ${data.days.length + 2}`,
-          text: 'No habits yet — add one below.',
+      const mark = day.day === 1 || day.day % 5 === 0;
+      nums.appendChild(
+        el('span', {
+          class: day.is_today ? 'today' : mark ? 'mark' : '',
+          text: day.is_today || mark ? String(day.day) : '·',
         }),
       );
     }
+    rows.appendChild(ruler);
 
-    // The two hand-entered numbers sit under the habits as their own rows:
-    // same month, same columns, so they read against the ticks.
-    numberRow('screen', 'Screen time', data.screen);
-    numberRow('sleep', 'Sleep', data.sleep);
+    for (const habit of data.habits) {
+      rows.appendChild(habitRow(habit));
+    }
+
+    if (!data.habits.length) {
+      rows.appendChild(
+        el('div', { class: 'empty', text: 'no habits yet — type one below and press Enter' }),
+      );
+    }
   }
 
-  function habitName(habit) {
-    const name = el('span', { class: 'habit-label', text: habit.name });
+  function habitRow(habit) {
+    const name = el('span', { class: 'n', text: habit.name, title: 'Double-click to rename' });
     name.addEventListener('dblclick', () => {
-      const input = el('input', { class: 'inline-input', type: 'text', value: habit.name });
+      const input = el('input', { class: 'n', type: 'text', value: habit.name });
+      input.style.cssText =
+        'border:0;background:transparent;outline:none;font:inherit;color:inherit;width:100%';
       name.replaceWith(input);
       input.focus();
       input.select();
@@ -110,209 +88,174 @@ export function createHabitMonth({ grid, newHabit, entriesNode, addEntry, label,
       });
     });
 
-    const remove = el('button', {
-      class: 'icon-button',
-      type: 'button',
-      title: `Delete “${habit.name}”`,
-      text: '✕',
-      onclick: async () => {
-        await call('delete_habit', { id: habit.id }, 'Delete habit');
-        load();
-      },
-    });
+    // The stats belong on the right, where every row's read the same way.
+    const elapsed = data.days.filter((d) => !d.is_future).length;
+    const stats = [`${habit.count}/${elapsed}`];
+    if (habit.streak > 0) stats.push(`${habit.streak}d streak`);
 
-    return el('div', { class: 'cell name' }, [name, remove]);
-  }
-
-  function tickCell(habit, day, done) {
-    const classes = ['cell', 'tick'];
-    if (done) classes.push('done');
-    if (day.is_today) classes.push('today');
-    if (day.is_weekend) classes.push('weekend');
-    // A day that has not happened cannot have been done.
-    if (day.is_future) classes.push('future');
-
-    const cell = el('div', {
-      class: classes.join(' '),
-      title: `${habit.name} · ${day.date}`,
-      role: 'button',
-      'aria-label': `${habit.name} on ${day.date}`,
-      text: done ? '✓' : '',
-    });
-    if (!day.is_future) {
-      cell.addEventListener('click', async () => {
-        await call('toggle_habit', { id: habit.id, date: day.date }, 'Habit');
-        load();
-      });
-    }
-    return cell;
-  }
-
-  function numberRow(field, title, values) {
-    grid.appendChild(el('div', { class: 'cell name number-name' }, [
-      el('span', { class: 'habit-label', text: title }),
-    ]));
-
-    values.forEach((minutes, index) => {
+    const days = el('div', { class: 'habit-days' });
+    habit.done.forEach((done, index) => {
       const day = data.days[index];
-      const classes = ['cell', 'number'];
-      if (day.is_today) classes.push('today');
-      if (day.is_weekend) classes.push('weekend');
-      if (day.is_future) classes.push('future');
+      const classes = ['day'];
+      if (done) classes.push('on');
+      else if (day.is_future) classes.push('ahead');
+      else classes.push('miss');
 
-      // Hours are what the cell has room for; the editor takes any shape.
-      const shown = minutes ? (minutes / 60).toFixed(minutes % 60 ? 1 : 0) : '';
-      const cell = el('div', {
+      const cell = el('button', {
+        type: 'button',
         class: classes.join(' '),
-        title: `${title} · ${day.date}${minutes ? ` · ${Math.floor(minutes / 60)}h ${minutes % 60}m` : ''}`,
-        text: shown,
+        title: `${habit.name} · ${day.date}${done ? ' · done' : ''}`,
+        'aria-label': `${habit.name} on ${day.date}`,
+        disabled: day.is_future ? '' : null,
       });
       if (!day.is_future) {
-        cell.addEventListener('click', () => editNumber(cell, field, day, minutes));
+        cell.addEventListener('click', async () => {
+          await call('toggle_habit', { id: habit.id, date: day.date }, 'Habit');
+          load();
+        });
       }
-      grid.appendChild(cell);
+      days.appendChild(cell);
     });
 
-    const recorded = values.filter(Boolean);
-    const average = recorded.length
-      ? Math.round(recorded.reduce((sum, m) => sum + m, 0) / recorded.length)
-      : null;
-    grid.appendChild(
-      el('div', {
-        class: 'cell total',
-        title: average ? `Average ${Math.floor(average / 60)}h ${average % 60}m` : 'No entries',
-        text: average ? `${(average / 60).toFixed(1)}` : '–',
-      }),
-    );
+    return el('div', { class: 'habit-row' }, [
+      el('div', { class: 'habit-name' }, [name]),
+      days,
+      el('span', { class: 'habit-total', text: stats.join(' · ') }),
+    ]);
   }
 
-  function editNumber(cell, field, day, minutes) {
-    const input = el('input', {
-      class: 'cell-input',
-      type: 'text',
-      title: DURATION_HINT,
-      value: minutes ? `${Math.floor(minutes / 60)}h${minutes % 60 ? minutes % 60 : ''}` : '',
-    });
-    cell.replaceChildren(input);
-    input.focus();
-    input.select();
+  /** Space on the habits page ticks every habit for today — the common case. */
+  async function toggleToday() {
+    if (!data?.habits.length) return;
+    const todayIso = toIso(getToday());
+    const index = data.days.findIndex((d) => d.date === todayIso);
+    if (index < 0) return;
 
-    const commit = async () => {
-      await call('set_day_metric', { date: day.date, field, value: input.value }, 'Saving');
-      load();
-    };
-    input.addEventListener('blur', commit);
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') commit();
-      if (event.key === 'Escape') load();
-    });
+    // If any is untouched, fill them in; if all are done, clear them.
+    const allDone = data.habits.every((h) => h.done[index]);
+    for (const habit of data.habits) {
+      if (habit.done[index] === !allDone) continue;
+      await call('toggle_habit', { id: habit.id, date: todayIso }, 'Habit');
+    }
+    load();
   }
 
   // ---------- the journal ----------
 
   async function renderJournal() {
     const [year, month] = shown;
-    const journal = await call('month_journal', { year, month }, 'Journal');
-    clear(entriesNode);
-    if (!journal) return;
+    const page = await call('month_journal', { year, month }, 'Journal');
+    clear(journal);
+    clear(summary);
 
-    if (!journal.entries.length) {
-      entriesNode.appendChild(
-        el('p', {
-          class: 'empty-row',
-          text: 'Nothing written this month. Add an entry to start.',
-        }),
+    const entries = page?.entries ?? [];
+    if (!entries.length) {
+      journal.appendChild(
+        el('div', { class: 'empty', text: 'nothing written this month' }),
       );
-      return;
     }
-    for (const entry of journal.entries) {
-      entriesNode.appendChild(entryBlock(year, month, entry));
+    const todayIso = toIso(getToday());
+    for (const entry of entries) {
+      journal.appendChild(entryRow(year, month, entry, todayIso));
     }
+
+    renderSummary();
   }
 
-  function entryBlock(year, month, entry) {
+  function entryRow(year, month, entry, todayIso) {
+    const body = el('textarea', { class: 'what', rows: '1' });
+    body.value = entry.body;
+    const size = () => {
+      body.style.height = 'auto';
+      body.style.height = `${body.scrollHeight}px`;
+    };
+    body.addEventListener('input', size);
+
+    let timer = null;
     const save = () =>
       call(
         'save_journal_entry',
-        { year, month, entry: { id: entry.id, title: title.value, body: body.value } },
+        { year, month, entry: { id: entry.id, title: entry.title, body: body.value } },
         'Journal',
       );
-
-    const title = el('input', {
-      class: 'entry-title',
-      type: 'text',
-      value: entry.title,
-      placeholder: 'Heading — a day, a week, anything',
-    });
-    title.addEventListener('change', save);
-
-    const body = el('textarea', {
-      class: 'entry-body',
-      placeholder: 'Write whatever.',
-    });
-    body.value = entry.body;
-    const autosize = () => {
-      body.style.height = 'auto';
-      body.style.height = `${Math.max(64, body.scrollHeight)}px`;
-    };
-    body.addEventListener('input', autosize);
-
-    let timer = null;
     body.addEventListener('input', () => {
       clearTimeout(timer);
       timer = setTimeout(save, 600);
     });
     body.addEventListener('blur', save);
 
-    const remove = el('button', {
-      class: 'icon-button',
-      type: 'button',
-      title: 'Delete entry',
-      text: '✕',
-      onclick: async () => {
-        await call('delete_journal_entry', { year, month, id: entry.id }, 'Journal');
-        renderJournal();
-      },
-    });
-
-    const block = el('article', { class: 'entry' }, [
-      el('div', { class: 'entry-head' }, [title, remove]),
+    // An entry headed with today's date is the live one.
+    const isToday = entry.title && parseDate(todayIso)?.getDate() === Number(entry.title.match(/\d+/)?.[0]);
+    const row = el('div', { class: `entry ${isToday ? 'today' : ''}`.trim() }, [
+      el('span', { class: 'when', text: entry.title || '—' }),
       body,
     ]);
-    // Sizing needs the node in the document, so do it on the next frame.
-    requestAnimationFrame(autosize);
-    return block;
+    requestAnimationFrame(size);
+    return row;
   }
 
-  async function newEntry() {
-    const [year, month] = shown;
-    // A new entry is headed with today when today is in the month on screen,
-    // which is the common case and saves a keystroke.
-    const today = getToday();
-    const inMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
-    const heading = inMonth
-      ? today.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric' })
-      : '';
+  /** How the month actually went, in four numbers. */
+  function renderSummary() {
+    const past = data.days.filter((d) => !d.is_future).length;
+    const slots = past * data.habits.length;
+    const done = data.habits.reduce((sum, h) => sum + h.count, 0);
+    const pct = slots ? Math.round((done / slots) * 100) : 0;
+    const best = data.habits.reduce((max, h) => Math.max(max, h.streak), 0);
+    const perfect = data.days.filter(
+      (day, i) => !day.is_future && data.habits.length && data.habits.every((h) => h.done[i]),
+    ).length;
 
+    summary.append(
+      el('span', { class: 'block-head' }, [el('span', { text: 'THIS MONTH' })]),
+      el('div', { style: 'display:flex;align-items:baseline;gap:8px' }, [
+        el('span', { class: 'big', text: `${pct}%` }),
+        el('span', { style: 'font-family:var(--mono);font-size:10px;color:var(--text-fainter)', text: 'completion' }),
+      ]),
+      el('div', { class: 'rows' }, [
+        el('div', {}, [el('span', { text: 'best streak' }), el('b', { text: `${best}d` })]),
+        el('div', {}, [el('span', { text: 'perfect days' }), el('b', { text: String(perfect) })]),
+        el('div', {}, [
+          el('span', { text: 'missed' }),
+          el('b', { class: 'bad', text: String(Math.max(0, slots - done)) }),
+        ]),
+      ]),
+      el('div', { class: 'legend' }, [
+        el('span', {}, [
+          el('span', { class: 'swatch', style: 'background:var(--habit-done)' }),
+          document.createTextNode('done'),
+        ]),
+        el('span', {}, [
+          el('span', {
+            class: 'swatch',
+            style: 'background:var(--habit-miss);border:1px solid var(--habit-miss-line)',
+          }),
+          document.createTextNode('missed'),
+        ]),
+      ]),
+    );
+  }
+
+  /** Adds a habit, or a journal line for today, from the shared capture bar. */
+  async function submit(text) {
+    const line = text.trim();
+    if (!line) return;
+    const [year, month] = shown ?? [];
+    if (!year) return;
+
+    const today = getToday();
+    const heading = today.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
     await call(
       'save_journal_entry',
-      { year, month, entry: { id: null, title: heading, body: '' } },
+      { year, month, entry: { id: null, title: heading, body: line } },
       'Journal',
     );
-    await renderJournal();
-    entriesNode.querySelector('.entry:last-child .entry-body')?.focus();
+    load();
   }
 
-  newHabit.addEventListener('keydown', async (event) => {
-    if (event.key !== 'Enter' || !newHabit.value.trim()) return;
-    await call('add_habit', { name: newHabit.value.trim() }, 'Add habit');
-    newHabit.value = '';
+  async function addHabit(name) {
+    await call('add_habit', { name }, 'Add habit');
     load();
-  });
-  addEntry.addEventListener('click', newEntry);
+  }
 
-  return { load, step, thisMonth };
+  return { load, step, toggleToday, submit, addHabit };
 }
-
-/** The ISO date of "today", for callers that need it without a round trip. */
-export const todayIso = () => toIso(new Date());

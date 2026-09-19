@@ -1,87 +1,80 @@
-// The task detail pane.
+// The detail pane, Direction B.
 //
-// Minimal on purpose: two chips, a title, and one body that is either notes or
-// subtasks. Everything else — the calendar, the time, the repeat rule, the
-// priority — lives behind a chip, so the pane shows what a task *is* and only
-// unfolds a picker when you ask it to.
+// A labelled column: what the task is at the top, then its facts as chips, then
+// subtasks and the note as two hairline-ruled blocks. The actions live in a
+// mono footer keyed like the rest of the app, so the pane teaches its own
+// shortcuts instead of hiding them behind icons.
 
-import { call, clear, el, formatDue, parseDate, shortTime, toIso } from './shared.js';
+import { clear, el, parseDate, shortTime, toIso } from './shared.js';
 
 const PRIORITIES = [
-  ['high', 'High', 'p-high'],
-  ['medium', 'Medium', 'p-medium'],
-  ['low', 'Low', 'p-low'],
-  ['none', 'None', ''],
+  ['high', '!p1'],
+  ['medium', '!p2'],
+  ['low', '!p3'],
+  ['none', 'none'],
 ];
 
 const REPEATS = [
-  ['', 'Does not repeat'],
-  ['every day', 'Daily'],
-  ['every weekday', 'Every weekday'],
-  ['every week', 'Weekly'],
-  ['every other week', 'Every other week'],
-  ['every month', 'Monthly'],
-  ['every year', 'Yearly'],
+  ['', 'does not repeat'],
+  ['every day', 'daily'],
+  ['every weekday', 'weekdays'],
+  ['every week', 'weekly'],
+  ['every other week', 'fortnightly'],
+  ['every month', 'monthly'],
+  ['every year', 'yearly'],
 ];
 
-/** Closes whatever popover is open, if any. */
-function closePopovers(root) {
-  for (const open of root.querySelectorAll('.popover')) open.remove();
-  for (const active of root.querySelectorAll('.chip-button.open')) active.classList.remove('open');
+function closePops(root) {
+  for (const pop of root.querySelectorAll('.pop')) pop.remove();
 }
 
-/** Anchors a popover under `button` inside the pane. */
-function openPopover(root, button, build) {
-  const wasOpen = button.classList.contains('open');
-  closePopovers(root);
-  if (wasOpen) return;
+/** Opens a popover anchored under `anchor`, inside the pane. */
+function openPop(root, anchor, build) {
+  const existing = root.querySelector('.pop');
+  const sameOwner = existing?._owner === anchor;
+  closePops(root);
+  if (sameOwner) return;
 
-  button.classList.add('open');
-  const popover = el('div', { class: 'popover' });
-  build(popover, () => closePopovers(root));
-  button.parentElement.appendChild(popover);
+  const pop = el('div', { class: 'pop' });
+  pop._owner = anchor;
+  build(pop, () => closePops(root));
+  root.appendChild(pop);
+
+  // Sit under the anchor, clamped inside the pane.
+  const paneBox = root.getBoundingClientRect();
+  const box = anchor.getBoundingClientRect();
+  pop.style.top = `${box.bottom - paneBox.top + 6}px`;
+  pop.style.left = `${Math.max(8, Math.min(box.left - paneBox.left, paneBox.width - pop.offsetWidth - 8))}px`;
 }
 
-/** A month grid for the date picker. */
 function miniCalendar(selectedIso, todayDate, onPick) {
-  const selected = parseDate(selectedIso);
-  const focus = selected ?? todayDate;
+  const focus = parseDate(selectedIso) ?? todayDate;
   let shown = new Date(focus.getFullYear(), focus.getMonth(), 1);
-
-  const wrap = el('div', { class: 'mini-cal' });
+  const wrap = el('div', { class: 'mini' });
 
   const draw = () => {
     clear(wrap);
-    const label = shown.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     wrap.appendChild(
       el('div', { class: 'mini-head' }, [
-        el('button', {
-          type: 'button',
-          text: '‹',
-          onclick: () => {
-            shown = new Date(shown.getFullYear(), shown.getMonth() - 1, 1);
-            draw();
-          },
+        el('button', { type: 'button', text: '‹', onclick: () => {
+          shown = new Date(shown.getFullYear(), shown.getMonth() - 1, 1);
+          draw();
+        } }),
+        el('span', {
+          text: shown.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
         }),
-        el('strong', { text: label }),
-        el('button', {
-          type: 'button',
-          text: '›',
-          onclick: () => {
-            shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1);
-            draw();
-          },
-        }),
+        el('button', { type: 'button', text: '›', onclick: () => {
+          shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1);
+          draw();
+        } }),
       ]),
     );
 
     const grid = el('div', { class: 'mini-grid' });
-    for (const day of ['M', 'T', 'W', 'T', 'F', 'S', 'S']) {
+    for (const day of ['S', 'M', 'T', 'W', 'T', 'F', 'S']) {
       grid.appendChild(el('span', { class: 'mini-dow', text: day }));
     }
-    // Monday-first, like the rest of the app.
-    const lead = (shown.getDay() + 6) % 7;
-    const start = new Date(shown.getFullYear(), shown.getMonth(), 1 - lead);
+    const start = new Date(shown.getFullYear(), shown.getMonth(), 1 - shown.getDay());
     for (let i = 0; i < 42; i += 1) {
       const date = new Date(start);
       date.setDate(start.getDate() + i);
@@ -89,7 +82,7 @@ function miniCalendar(selectedIso, todayDate, onPick) {
       const classes = ['mini-day'];
       if (date.getMonth() !== shown.getMonth()) classes.push('other');
       if (iso === toIso(todayDate)) classes.push('today');
-      if (selectedIso && iso === selectedIso) classes.push('selected');
+      if (selectedIso && iso === selectedIso) classes.push('on');
       grid.appendChild(
         el('button', {
           type: 'button',
@@ -106,123 +99,172 @@ function miniCalendar(selectedIso, todayDate, onPick) {
   return wrap;
 }
 
-/**
- * Renders the pane for `task` into `root`.
- *
- * `actions` supplies everything that touches the store, so this module stays
- * about layout and never learns how a task is saved.
- */
-export function renderDetail(root, task, { todayDate, actions, bodyMode, onBodyMode }) {
+/** A hairline-ruled block heading, optionally with a count on the right. */
+function blockHead(label, right) {
+  return el('div', { class: 'block-head' }, [
+    el('span', { text: label }),
+    el('span', { class: 'rule' }),
+    right ? el('span', { text: right }) : null,
+  ]);
+}
+
+export function renderDetail(root, task, { todayDate, actions }) {
   clear(root);
-  closePopovers(root);
 
-  // ---- chips row: date, priority, close ----
+  root.appendChild(
+    el('div', { class: 'detail-head' }, [
+      el('span', { text: 'DETAIL' }),
+      el('span', { class: 'spacer' }),
+      el('button', {
+        type: 'button',
+        class: 'plain',
+        text: 'Esc',
+        'aria-label': 'Close task detail',
+        onclick: actions.close,
+      }),
+    ]),
+  );
 
-  const dueIso = task.due ?? null;
-  const dateLabel = dueIso ? formatDue(dueIso, todayDate) : 'No date';
-  const dateChip = el('button', {
-    class: `chip-button ${dueIso ? 'set' : ''}`.trim(),
+  const body = el('div', { class: 'detail-body' });
+
+  // ---- what it is ----
+
+  const done = Boolean(task.completed_at);
+  const check = el('button', {
+    class: `check ${done ? 'on' : ''}`.trim(),
     type: 'button',
-    title: 'Date, time and repeat',
-  }, [el('span', { class: 'chip-icon', text: '🗓' }), el('span', { text: dateLabel })]);
+    'aria-label': done ? 'Reopen this task' : 'Complete this task',
+    onclick: () => actions.toggleComplete(task),
+  });
 
+  const title = el('textarea', { class: 'detail-title', rows: '1', spellcheck: 'false' });
+  title.value = task.title;
+  const autosize = () => {
+    title.style.height = 'auto';
+    title.style.height = `${title.scrollHeight}px`;
+  };
+  title.addEventListener('input', autosize);
+  title.addEventListener('change', () => actions.edit({ title: title.value.trim() }));
+  title.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      title.blur();
+    }
+  });
+
+  body.appendChild(el('div', { class: 'detail-title-row' }, [check, title]));
+
+  // ---- its facts, as chips ----
+
+  const chips = el('div', { class: 'detail-chips' });
+  const dueIso = task.due ?? null;
+
+  const whenLabel = () => {
+    if (!dueIso) return 'no date';
+    const date = parseDate(dueIso);
+    const delta = Math.round((date - todayDate) / 86400000);
+    const day =
+      delta === 0
+        ? 'today'
+        : delta === 1
+          ? 'tomorrow'
+          : date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return task.time ? `${day} ${task.time.slice(0, 5)}` : day;
+  };
+
+  const dateChip = el('button', { class: 'chip when', type: 'button', text: whenLabel() });
   dateChip.addEventListener('click', () =>
-    openPopover(root, dateChip, (popover, close) => {
-      popover.appendChild(
+    openPop(root, dateChip, (pop, close) => {
+      pop.appendChild(
         miniCalendar(dueIso, todayDate, (iso) => {
           actions.edit({ due: [iso] });
           close();
         }),
       );
-
-      const quick = el('div', { class: 'popover-row' });
+      const quick = el('div', { class: 'pop-row' });
       const shift = (days) => {
         const date = new Date(todayDate);
         date.setDate(date.getDate() + days);
         return toIso(date);
       };
       for (const [label, iso] of [
-        ['Today', shift(0)],
-        ['Tomorrow', shift(1)],
-        ['Next week', shift(7)],
+        ['today', shift(0)],
+        ['tomorrow', shift(1)],
+        ['next week', shift(7)],
       ]) {
         quick.appendChild(
-          el('button', {
-            type: 'button',
-            text: label,
-            onclick: () => {
-              actions.edit({ due: [iso] });
-              close();
-            },
-          }),
+          el('button', { type: 'button', text: label, onclick: () => {
+            actions.edit({ due: [iso] });
+            close();
+          } }),
         );
       }
-      popover.appendChild(quick);
+      pop.appendChild(quick);
 
-      // Time and repeat live with the date because they only mean anything
-      // once something is scheduled.
       const time = el('input', { type: 'time', value: shortTime(task.time) });
       time.addEventListener('change', () => actions.edit({ time: [time.value || null] }));
-      popover.appendChild(
-        el('label', { class: 'popover-field' }, [el('span', { text: 'Time' }), time]),
-      );
+      pop.appendChild(el('label', { class: 'pop-field' }, [el('span', { text: 'time' }), time]));
 
-      const repeat = el('select');
-      // describe() emits exactly the phrases listed in REPEATS, so the label
-      // doubles as the picker's value and a round trip changes nothing.
-      const current = task.recurrence_label ?? '';
-      for (const [value, label] of REPEATS) {
-        const option = el('option', { value, text: label });
-        if (value === current) option.selected = true;
-        repeat.appendChild(option);
-      }
-      repeat.addEventListener('change', () => actions.edit({ recurrence: [repeat.value || null] }));
-      popover.appendChild(
-        el('label', { class: 'popover-field' }, [el('span', { text: 'Repeat' }), repeat]),
-      );
-      // A rule the picker cannot express is shown rather than silently reset.
-      if (task.recurrence_label && !REPEATS.some(([value]) => value === current)) {
-        popover.appendChild(
-          el('p', { class: 'popover-note', text: `Currently: ${task.recurrence_label}` }),
-        );
-      }
-
-      popover.appendChild(
-        el('div', { class: 'popover-row' }, [
-          el('button', {
-            type: 'button',
-            class: 'danger',
-            text: 'Clear date',
-            onclick: () => {
-              actions.edit({ due: [null], time: [null] });
-              close();
-            },
-          }),
+      pop.appendChild(
+        el('div', { class: 'pop-row' }, [
+          el('button', { type: 'button', class: 'danger', text: 'clear', onclick: () => {
+            actions.edit({ due: [null], time: [null] });
+            close();
+          } }),
         ]),
       );
     }),
   );
+  chips.appendChild(dateChip);
 
-  const priorityName = String(task.priority ?? 'none').toLowerCase();
-  const priorityChip = el(
-    'button',
-    {
-      class: `chip-button flag ${priorityName !== 'none' ? `set p-${priorityName}` : ''}`.trim(),
-      type: 'button',
-      title: 'Priority',
-    },
-    [
-      el('span', { class: 'chip-icon', text: '⚑' }),
-      el('span', { text: priorityName === 'none' ? 'Priority' : PRIORITIES.find(([v]) => v === priorityName)?.[1] ?? 'Priority' }),
-    ],
-  );
-  priorityChip.addEventListener('click', () =>
-    openPopover(root, priorityChip, (popover, close) => {
-      for (const [value, label, cls] of PRIORITIES) {
-        popover.appendChild(
+  const repeatChip = el('button', {
+    class: 'chip',
+    type: 'button',
+    text: task.recurrence_label ?? 'no repeat',
+  });
+  repeatChip.addEventListener('click', () =>
+    openPop(root, repeatChip, (pop, close) => {
+      // describe() emits exactly these phrases, so the label round-trips.
+      const current = task.recurrence_label ?? '';
+      for (const [value, label] of REPEATS) {
+        pop.appendChild(
           el('button', {
             type: 'button',
-            class: `popover-item ${cls}`.trim(),
+            style: 'display:block;width:100%;text-align:left;margin-bottom:4px',
+            class: value === current ? 'on' : '',
+            text: label,
+            onclick: () => {
+              actions.edit({ recurrence: [value || null] });
+              close();
+            },
+          }),
+        );
+      }
+      if (current && !REPEATS.some(([value]) => value === current)) {
+        pop.appendChild(el('p', { class: 'pop-note', text: `now: ${current}` }));
+      }
+    }),
+  );
+  chips.appendChild(repeatChip);
+
+  if (task.project) chips.appendChild(el('span', { class: 'chip', text: `@${task.project}` }));
+  for (const tag of task.tags ?? []) {
+    chips.appendChild(el('span', { class: 'chip', text: `#${tag}` }));
+  }
+
+  const priority = String(task.priority ?? 'none').toLowerCase();
+  const prioChip = el('button', {
+    class: `chip ${priority !== 'none' ? 'much' : ''}`.trim(),
+    type: 'button',
+    text: priority === 'none' ? 'no priority' : PRIORITIES.find(([v]) => v === priority)?.[1],
+  });
+  prioChip.addEventListener('click', () =>
+    openPop(root, prioChip, (pop, close) => {
+      for (const [value, label] of PRIORITIES) {
+        pop.appendChild(
+          el('button', {
+            type: 'button',
+            style: 'display:block;width:100%;text-align:left;margin-bottom:4px',
             text: label,
             onclick: () => {
               actions.edit({ priority: value });
@@ -233,151 +275,97 @@ export function renderDetail(root, task, { todayDate, actions, bodyMode, onBodyM
       }
     }),
   );
+  chips.appendChild(prioChip);
+  body.appendChild(chips);
 
-  root.appendChild(
-    el('div', { class: 'detail-chips' }, [
-      dateChip,
-      priorityChip,
-      el('button', {
-        class: 'icon-button close',
-        type: 'button',
-        title: 'Close  (Esc)',
-        'aria-label': 'Close task detail',
-        text: '✕',
-        onclick: actions.close,
-      }),
-    ]),
-  );
+  // ---- subtasks ----
 
-  // ---- title, with the body toggle beside it ----
-
-  const title = el('textarea', { class: 'detail-title', rows: '1', spellcheck: 'false' });
-  title.value = task.title;
-  const autosize = () => {
-    title.style.height = 'auto';
-    title.style.height = `${title.scrollHeight}px`;
-  };
-  title.addEventListener('input', autosize);
-  title.addEventListener('change', () => actions.edit({ title: title.value.trim() }));
-  // Enter commits rather than adding a line; the title is one line by nature.
-  title.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      title.blur();
-    }
-  });
-
-  const subtaskCount = (task.subtasks ?? []).length;
-  const toggle = el('button', {
-    class: 'icon-button',
-    type: 'button',
-    title: bodyMode === 'notes' ? 'Switch to subtasks' : 'Switch to notes',
-    'aria-label': bodyMode === 'notes' ? 'Switch to subtasks' : 'Switch to notes',
-    text: bodyMode === 'notes' ? '☑' : '¶',
-    onclick: () => onBodyMode(bodyMode === 'notes' ? 'subtasks' : 'notes'),
-  });
-
-  root.appendChild(
-    el('div', { class: 'detail-title-row' }, [
-      title,
-      el('div', { class: 'title-tools' }, [
-        subtaskCount
-          ? el('span', {
-              class: 'count',
-              text: `${task.subtasks_done}/${subtaskCount}`,
-            })
-          : null,
-        toggle,
-      ]),
-    ]),
-  );
-  // Sizing needs the element in the document.
-  autosize();
-
-  root.appendChild(
-    el('div', { class: 'detail-body' }, [
-      bodyMode === 'notes' ? notesBody(task, actions) : subtaskBody(task, actions),
-    ]),
-  );
-
-  // ---- the few actions that are not a field ----
-
-  const footer = el('div', { class: 'detail-actions' }, [
-    el('button', {
-      type: 'button',
-      text: task.completed_at ? 'Reopen' : 'Complete',
-      onclick: () => actions.toggleComplete(task),
-    }),
+  const subtasks = task.subtasks ?? [];
+  const subBlock = el('div', { class: 'block' }, [
+    blockHead('SUBTASKS', subtasks.length ? `${task.subtasks_done}/${subtasks.length}` : null),
   ]);
-  if (task.recurrence_label) {
-    const occurrence = task.next ?? task.due;
-    footer.append(
-      el('button', {
-        type: 'button',
-        text: 'Skip one',
-        title: 'Skip this occurrence, keep the series',
-        onclick: () => actions.skip(task, occurrence),
-      }),
-      el('button', {
-        type: 'button',
-        text: 'Push a day',
-        title: 'Move just this occurrence to tomorrow',
-        onclick: () => actions.push(task, occurrence),
-      }),
+  const list = el('ul', { class: 'subtasks' });
+  for (const sub of subtasks) {
+    list.appendChild(
+      el('li', { class: sub.done ? 'done' : '' }, [
+        el('button', {
+          class: `check ${sub.done ? 'on' : ''}`.trim(),
+          type: 'button',
+          'aria-label': `${sub.done ? 'Reopen' : 'Complete'}: ${sub.title}`,
+          onclick: () => actions.toggleSubtask(task, sub),
+        }),
+        el('span', { text: sub.title }),
+      ]),
     );
   }
-  footer.appendChild(
-    el('button', {
-      type: 'button',
-      class: 'danger',
-      text: 'Delete',
-      onclick: () => actions.remove(task),
-    }),
-  );
-  root.appendChild(footer);
+  subBlock.appendChild(list);
 
-  // A click anywhere else in the pane dismisses an open picker.
-  root.addEventListener('mousedown', (event) => {
-    if (!event.target.closest('.popover') && !event.target.closest('.chip-button')) {
-      closePopovers(root);
-    }
-  });
-}
-
-function notesBody(task, actions) {
-  const notes = el('textarea', {
-    class: 'detail-notes',
-    placeholder: 'Notes — markdown, bullet points, anything.',
-  });
-  notes.value = task.notes ?? '';
-  notes.addEventListener('change', () => actions.edit({ notes: notes.value }));
-  return notes;
-}
-
-function subtaskBody(task, actions) {
-  const list = el('ul', { class: 'subtasks' });
-  for (const sub of task.subtasks ?? []) {
-    const box = el('input', { type: 'checkbox' });
-    box.checked = sub.done;
-    box.addEventListener('change', () => actions.toggleSubtask(task, sub));
-
-    const text = el('span', { text: sub.title });
-    list.appendChild(el('li', { class: sub.done ? 'done' : '' }, [box, text]));
-  }
-
-  const adder = el('input', {
-    type: 'text',
-    class: 'inline-input',
-    placeholder: 'Add a subtask…',
-  });
+  const adder = el('input', { type: 'text', placeholder: 'add subtask' });
   adder.addEventListener('keydown', async (event) => {
     if (event.key !== 'Enter' || !adder.value.trim()) return;
     await actions.addSubtask(task, adder.value.trim());
     adder.value = '';
   });
+  subBlock.appendChild(
+    el('div', { class: 'add-row' }, [
+      el('span', {}, [
+        (() => {
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('width', '9');
+          svg.setAttribute('height', '9');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('fill', 'none');
+          svg.setAttribute('stroke', 'currentColor');
+          svg.setAttribute('stroke-width', '3');
+          svg.setAttribute('stroke-linecap', 'round');
+          svg.innerHTML = '<path d="M12 5v14"/><path d="M5 12h14"/>';
+          return svg;
+        })(),
+      ]),
+      adder,
+    ]),
+  );
+  body.appendChild(subBlock);
 
-  return el('div', {}, [list, adder]);
+  // ---- the note ----
+
+  const note = el('textarea', { class: 'note-field', placeholder: 'a note…' });
+  note.value = task.notes ?? '';
+  const sizeNote = () => {
+    note.style.height = 'auto';
+    note.style.height = `${Math.max(46, note.scrollHeight)}px`;
+  };
+  note.addEventListener('input', sizeNote);
+  note.addEventListener('change', () => actions.edit({ notes: note.value }));
+  body.appendChild(el('div', { class: 'block' }, [blockHead('NOTE'), note]));
+
+  root.appendChild(body);
+
+  // ---- the footer: the actions that are not a field ----
+
+  const foot = el('div', { class: 'detail-foot' }, [
+    el('button', { type: 'button', text: 'D date', onclick: () => dateChip.click() }),
+    el('button', { type: 'button', text: 'R repeat', onclick: () => repeatChip.click() }),
+  ]);
+  if (task.recurrence_label) {
+    const occurrence = task.next ?? task.due;
+    foot.append(
+      el('button', { type: 'button', text: 'S skip', title: 'Skip this occurrence', onclick: () => actions.skip(task, occurrence) }),
+      el('button', { type: 'button', text: 'P push', title: 'Move this occurrence a day', onclick: () => actions.push(task, occurrence) }),
+    );
+  }
+  foot.append(
+    el('span', { class: 'spacer' }),
+    el('button', { type: 'button', class: 'danger', text: 'Del', onclick: () => actions.remove(task) }),
+  );
+  root.appendChild(foot);
+
+  // Sizing needs the nodes in the document.
+  autosize();
+  sizeNote();
+
+  // A click anywhere that is not a chip or a popover dismisses the picker.
+  root.addEventListener('mousedown', (event) => {
+    if (!event.target.closest('.pop') && !event.target.closest('.chip')) closePops(root);
+  });
 }
-
-/** Re-exported so the caller can dismiss pickers when the pane closes. */
-export { closePopovers };
