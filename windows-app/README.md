@@ -15,15 +15,63 @@ IPC bridge as `window.__TAURI__`, so the repo carries no `node_modules` and the
 frontend needs no build step. Editing a file under `src/` needs a rebuild only
 because Tauri embeds the assets into the binary.
 
-Packaging an installer (`.msi`/`.exe`) does need the Tauri CLI:
+Requires Rust 1.88+ (current Tauri dependencies), the MSVC toolchain, and the
+WebView2 runtime — present on Windows 11 by default.
+
+## Building a release
 
 ```sh
-cargo install tauri-cli --version "^2"
+cargo install tauri-cli --version "^2" --locked   # once
 cargo tauri build
 ```
 
-Requires Rust 1.88+ (current Tauri dependencies), the MSVC toolchain, and the
-WebView2 runtime — present on Windows 11 by default.
+The first build downloads WiX and NSIS itself; no manual installer toolchain is
+needed. It writes three things under `target/release/`:
+
+| Artifact | Path | Use |
+| --- | --- | --- |
+| Setup | `bundle/nsis/Master Todo_<version>_x64-setup.exe` | what a person downloads and runs |
+| MSI | `bundle/msi/Master Todo_<version>_x64_en-US.msi` | silent/managed install (`msiexec /i … /qn`) |
+| Bare binary | `mtodo-windows.exe` | portable — runs with no install |
+
+Both installers register the app so reminders are attributed to Master Todo
+rather than to whatever launched it, and both add the tray icon and Start menu
+entry. The bare `.exe` works too, but Windows will not know its identity.
+
+The version lives in **two** places that must agree: `version` in the workspace
+`Cargo.toml` and `version` in `src-tauri/tauri.conf.json`. Bump both, or the
+installer's version and the binary's disagree.
+
+Installing over an older version keeps the database — it lives in `%APPDATA%`,
+not in the install directory (see [Data](#data)), so upgrades never touch it.
+
+### The SmartScreen warning
+
+The build is unsigned, so the first run of the installer shows "Windows
+protected your PC" — More info → Run anyway. That is expected, and it is what
+anyone else downloading it will see too. Removing it means an
+Authenticode certificate from a CA (an OV cert costs a few hundred a year and
+still needs reputation to build; an EV cert clears SmartScreen immediately and
+costs more). Tauri signs automatically once `windows.signCommand` or the
+`TAURI_SIGNING_*` environment is configured. For a self-hosted, self-installed
+app this is an optional expense, not a prerequisite.
+
+## Distributing it
+
+There is no server: the app is entirely local, so "hosting" means hosting the
+*download*. Push the repo to GitHub and attach the installer to a release:
+
+```sh
+gh release create v0.1.0 \
+  "target/release/bundle/nsis/Master Todo_0.1.0_x64-setup.exe" \
+  "target/release/bundle/msi/Master Todo_0.1.0_x64_en-US.msi" \
+  --title "Master Todo 0.1.0" --notes "First release."
+```
+
+Releases are free for public repos, need no infrastructure, and give a stable
+download URL. [`/sync-server`](../sync-server) is the only part of the project
+that will ever need somewhere to run, and it is not built yet — until then,
+every device is independent.
 
 ## What it does
 

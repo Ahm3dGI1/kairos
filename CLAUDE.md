@@ -65,6 +65,7 @@ cargo run -p mtodo-windows      # launch the Windows app
 cargo test -p mtodo-core        # the fast loop: parser, recurrence, store
 cargo clippy --workspace --all-targets
 cargo fmt
+cargo tauri build               # installers -> target/release/bundle
 ```
 
 ## Conventions
