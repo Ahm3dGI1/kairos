@@ -9,7 +9,7 @@
   <body>
     <div id="error-bar" hidden></div>
 
-    <!-- The rail is the whole navigation: three pages and the sticky note. -->
+    <!-- The rail is the whole navigation: four pages and the sticky note. -->
     <nav class="rail" aria-label="Pages">
       <button id="page-agenda" class="active" type="button" aria-label="Tasks (1)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -34,6 +34,14 @@
         </svg>
         <span class="key">3</span>
       </button>
+      <button id="page-workout" type="button" aria-label="Workout (4)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 9v6" /><path d="M20 9v6" /><path d="M7 6v12" /><path d="M17 6v12" />
+          <path d="M7 12h10" />
+        </svg>
+        <span class="key">4</span>
+      </button>
 
       <div class="spacer"></div>
 
@@ -49,16 +57,21 @@
     <div class="column">
       <!-- One mono line: where you are, and what you can press. -->
       <div class="status">
-        <span id="here" class="here">everything</span>
+        <span id="here" class="here">Tasks</span>
         <span id="count"></span>
         <div class="spacer"></div>
         <div id="status-tools"></div>
       </div>
 
-      <!-- Tasks -->
+      <!-- Tasks: lists on the left, the grouped list beside them. -->
       <div id="agenda-page" class="page">
-        <ul id="agenda" class="list" tabindex="0" aria-label="Tasks"></ul>
-        <p id="empty" class="empty" hidden></p>
+        <div class="split">
+          <nav id="lists" class="lists" aria-label="Lists"></nav>
+          <div class="split-main">
+            <ul id="agenda" class="list" tabindex="0" aria-label="Tasks"></ul>
+            <p id="empty" class="empty" hidden></p>
+          </div>
+        </div>
       </div>
 
       <!-- Calendar -->
@@ -81,6 +94,17 @@
         </div>
       </div>
 
+      <!-- Workout: routines on the left, the session grid beside them. -->
+      <div id="workout-page" class="page" hidden>
+        <div class="split">
+          <nav id="routines" class="lists" aria-label="Routines"></nav>
+          <div class="split-main">
+            <div id="workout-grid" class="workout-grid"></div>
+            <p id="workout-empty" class="empty" hidden></p>
+          </div>
+        </div>
+      </div>
+
       <!-- Capture lives at the bottom and is always there, never a modal. -->
       <div id="preview" class="preview" aria-live="polite"></div>
       <div id="capture" class="capture">
@@ -96,7 +120,7 @@
             aria-label="Add a task in one line"
           />
         </div>
-        <span id="capture-hint" class="hint">J K move · X done · U undo</span>
+        <span id="capture-hint" class="hint">J K move · X done · U undo · Y redo</span>
       </div>
     </div>
 

@@ -35,6 +35,10 @@ pub struct Task {
     /// The project or section this belongs to, if any.
     pub project: Option<String>,
     pub subtasks: Vec<Subtask>,
+    /// How the subtask list is read: a set of steps, or a backlog the series
+    /// works through one occurrence at a time.
+    #[serde(default)]
+    pub checklist: Checklist,
     /// When this was completed. For a recurring task, completion advances
     /// [`Task::due`] to the next occurrence instead of setting this.
     pub completed_at: Option<NaiveDate>,
@@ -55,6 +59,7 @@ impl Task {
             tags: Vec::new(),
             project: None,
             subtasks: Vec::new(),
+            checklist: Checklist::All,
             completed_at: None,
             created_at,
         }
@@ -135,6 +140,45 @@ pub struct Subtask {
 impl Subtask {
     pub fn new(title: impl Into<String>) -> Self {
         Self { id: Uuid::new_v4(), title: title.into(), done: false }
+    }
+}
+
+/// How a task's subtask list is meant to be read.
+///
+/// The second mode is the one that makes a standing task useful: "Learning"
+/// repeats every week and holds a list of things to learn, and each week you
+/// tick one off. The occurrence is done because an item was done — the rest of
+/// the list is simply what is left, not work that is outstanding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Checklist {
+    /// Every item is part of this one task. Completing the task is up to you.
+    #[default]
+    All,
+    /// One item per occurrence. Ticking an item finishes the occurrence and
+    /// moves the series on.
+    OnePerOccurrence,
+}
+
+impl Checklist {
+    pub fn label(self) -> &'static str {
+        match self {
+            Checklist::All => "all",
+            Checklist::OnePerOccurrence => "one-per-occurrence",
+        }
+    }
+
+    pub fn parse(text: &str) -> Self {
+        match text {
+            "one-per-occurrence" => Checklist::OnePerOccurrence,
+            _ => Checklist::All,
+        }
+    }
+}
+
+impl Task {
+    /// The items still waiting, for a task whose list is a backlog.
+    pub fn remaining(&self) -> impl Iterator<Item = &Subtask> {
+        self.subtasks.iter().filter(|s| !s.done)
     }
 }
 

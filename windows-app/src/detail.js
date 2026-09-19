@@ -281,9 +281,30 @@ export function renderDetail(root, task, { todayDate, actions }) {
   // ---- subtasks ----
 
   const subtasks = task.subtasks ?? [];
-  const subBlock = el('div', { class: 'block' }, [
-    blockHead('SUBTASKS', subtasks.length ? `${task.subtasks_done}/${subtasks.length}` : null),
-  ]);
+  const backlog = task.checklist === 'one-per-occurrence';
+
+  // A recurring task can treat its list as a backlog: one item per occurrence,
+  // so "Learning" ticks off one thing a week instead of needing all of them.
+  const head = blockHead(
+    backlog ? 'BACKLOG' : 'SUBTASKS',
+    subtasks.length ? `${task.subtasks_done}/${subtasks.length}` : null,
+  );
+  if (task.recurrence_label) {
+    head.insertBefore(
+      el('button', {
+        type: 'button',
+        class: `mode ${backlog ? 'on' : ''}`.trim(),
+        title: backlog
+          ? 'Each occurrence ticks one item — click for an ordinary checklist'
+          : 'Ordinary checklist — click to tick one item per occurrence',
+        text: backlog ? 'one per occurrence' : 'all',
+        onclick: () =>
+          actions.edit({ checklist: backlog ? 'all' : 'one-per-occurrence' }),
+      }),
+      head.querySelector('.rule').nextSibling,
+    );
+  }
+  const subBlock = el('div', { class: 'block' }, [head]);
   const list = el('ul', { class: 'subtasks' });
   for (const sub of subtasks) {
     list.appendChild(
@@ -300,7 +321,10 @@ export function renderDetail(root, task, { todayDate, actions }) {
   }
   subBlock.appendChild(list);
 
-  const adder = el('input', { type: 'text', placeholder: 'add subtask' });
+  const adder = el('input', {
+    type: 'text',
+    placeholder: backlog ? 'add something to get to' : 'add subtask',
+  });
   adder.addEventListener('keydown', async (event) => {
     if (event.key !== 'Enter' || !adder.value.trim()) return;
     await actions.addSubtask(task, adder.value.trim());

@@ -7,7 +7,7 @@
 
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 
-use crate::task::{Exception, ExceptionAction, Recurrence, Task, WeekdaySet};
+use crate::task::{Checklist, Exception, ExceptionAction, Recurrence, Task, WeekdaySet};
 
 /// How far the expander will search before giving up, in raw occurrences.
 /// Bounds the pathological case where every candidate is excepted away.
@@ -245,4 +245,23 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     NaiveDate::from_ymd_opt(next_year, next_month, 1)
         .and_then(|first| first.pred_opt())
         .map_or(28, |last| last.day())
+}
+
+/// Ticks one checklist item, and closes the occurrence when the list is a
+/// backlog rather than a set of steps.
+///
+/// This is what makes a standing task like "Learning" work: the list holds the
+/// things you mean to get to, and finishing one *is* finishing this week's
+/// occurrence. Returns the date the series moved to, if it moved.
+pub fn complete_item(task: &mut Task, item: uuid::Uuid, on: NaiveDate) -> Option<NaiveDate> {
+    let sub = task.subtasks.iter_mut().find(|s| s.id == item)?;
+    sub.done = !sub.done;
+    let ticked = sub.done;
+
+    // Only a freshly ticked item on a backlog advances anything. Un-ticking is
+    // a correction, and must not push the series forward again.
+    if !ticked || task.checklist != Checklist::OnePerOccurrence || !task.is_recurring() {
+        return None;
+    }
+    complete_occurrence(task, on)
 }

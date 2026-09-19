@@ -44,6 +44,8 @@ WebView2 runtime — present on Windows 11 by default.
 - **Sticky note** — a small panel of today's tasks. By default it behaves like
   any other window and drops behind whatever you focus next; the pin in its
   header makes it stay above everything. It never takes focus when it appears.
+- **Lists** — a second sidebar inside Tasks holding every project in use and
+  every tag, so a task's project reads as the list it belongs to.
 - **One task list**, not a row of tabs: everything ahead in a single scroll,
   grouped Overdue → Today → Tomorrow → Next 7 days → Later → Someday. Completed
   work is a toggle rather than a destination. Projects and tags narrow the list
@@ -58,8 +60,16 @@ WebView2 runtime — present on Windows 11 by default.
   journal for the whole month: entries carry their own headings, so a day, a
   week or a trip can each be one block.
 - **Search** across titles, notes, subtasks, tags and projects.
-- **Undo** for completions, deletions and edits, backed by the store's log, so
-  it survives a restart.
+- **Undo and redo** for completions, deletions and edits, both backed by logs in
+  the database, so they survive a restart. A fresh edit discards the redo stack,
+  because replaying onto a world that has moved on is not the same act.
+- **A backlog checklist** — a recurring task can read its subtask list as a
+  backlog rather than a set of steps. "Learning" repeats weekly and holds the
+  things to get to; ticking one finishes that week's occurrence and moves the
+  series on, leaving the rest as what is left rather than work outstanding.
+- **The workout book** — routines (push, pull, legs) hold exercises, and each
+  session is a dated column of reps and weights beside them. Starting a session
+  copies the last one's numbers so you adjust rather than retype.
 - **Recurring exceptions** — skip or push a single occurrence from the detail
   pane without breaking the series.
 - **Reminders** — a Windows notification when a task's time arrives. The loop
@@ -88,8 +98,10 @@ The app is keyboard-first; the mouse is optional everywhere.
 | `E` | edit the selected task |
 | `Del` | delete |
 | `U` or `Ctrl+Z` | undo |
+| `Y` or `Ctrl+Shift+Z` | redo |
+| `S` | start today's session (Workout) |
 | `W` | toggle the sticky note |
-| `1`–`3` | Tasks, Calendar, Habits |
+| `1`–`4` | Tasks, Calendar, Habits, Workout |
 | `Esc` | close the pane, clear the search, dismiss the overlay |
 | `Ctrl+Shift+Space` | quick-add overlay, from anywhere in Windows |
 
@@ -101,6 +113,7 @@ src/                 frontend — no build step
   capture.js           the capture field: parse pills and backspace-to-revert
   detail.js            the detail pane, its date and priority pickers
   habits.js            the habit month grid and the month journal
+  workout.js           routines, exercises and the session grid
   quick-add.html/.js   the hotkey overlay, sharing capture.js
   widget.html/.js      the sticky note
   shared.js            IPC + date formatting shared by all of them
@@ -109,6 +122,7 @@ src/                 frontend — no build step
 src-tauri/
   src/main.rs          builder, plugins, the IPC surface
   src/commands.rs      commands — thin wrappers over the core
+  src/workout_commands.rs  the workout book
   src/shell.rs         tray, global hotkey, window management
   src/state.rs         the shared store, and the tasks-changed event
   tauri.conf.json      windows, CSP, bundle

@@ -32,6 +32,8 @@ pub struct TaskView {
     recurrence_label: Option<String>,
     /// How many subtasks are done, for the "2/5" badge.
     subtasks_done: usize,
+    /// "all" or "one-per-occurrence".
+    checklist: &'static str,
 }
 
 impl TaskView {
@@ -45,6 +47,7 @@ impl TaskView {
             overdue: task.is_overdue(today),
             recurrence_label: task.recurrence.map(|r| r.describe()),
             subtasks_done: task.subtasks.iter().filter(|s| s.done).count(),
+            checklist: task.checklist.label(),
             task,
         }
     }
@@ -231,6 +234,8 @@ pub struct Edit {
     tags: Option<Vec<String>>,
     /// A recurrence phrase ("every monday"), or null to clear the rule.
     recurrence: Option<Option<String>>,
+    /// "all" or "one-per-occurrence".
+    checklist: Option<String>,
 }
 
 #[tauri::command]
@@ -261,6 +266,9 @@ pub fn update_task(app: AppHandle, state: State<'_, AppState>, edit: Edit) -> Cm
             for tag in tags {
                 task.add_tag(tag);
             }
+        }
+        if let Some(mode) = edit.checklist {
+            task.checklist = mtodo_core::Checklist::parse(&mode);
         }
         if let Some(phrase) = edit.recurrence {
             task.recurrence = phrase
@@ -304,9 +312,7 @@ pub fn toggle_subtask(
     let today = today();
     let task = with_store(&app, &state, |store| {
         let mut task = store.get(id)?.ok_or(mtodo_core::StoreError::NotFound(id))?;
-        if let Some(sub) = task.subtasks.iter_mut().find(|s| s.id == subtask_id) {
-            sub.done = !sub.done;
-        }
+        mtodo_core::complete_item(&mut task, subtask_id, today);
         store.save(&task)?;
         Ok(task)
     })?;
@@ -369,8 +375,20 @@ pub fn undo(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<Undo
 }
 
 #[tauri::command]
+pub fn redo(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<UndoResult>> {
+    let redone = with_store(&app, &state, |s| s.redo())?;
+    Ok(redone
+        .map(|u| UndoResult { label: u.kind.label().to_string(), title: u.task.map(|t| t.title) }))
+}
+
+#[tauri::command]
 pub fn can_undo(state: State<'_, AppState>) -> CmdResult<bool> {
     read_store(&state, |s| s.can_undo())
+}
+
+#[tauri::command]
+pub fn can_redo(state: State<'_, AppState>) -> CmdResult<bool> {
+    read_store(&state, |s| s.can_redo())
 }
 
 #[tauri::command]

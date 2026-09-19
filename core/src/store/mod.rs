@@ -19,6 +19,9 @@ use crate::daily::{self, DayLog, Habit, HabitId, JournalEntry, MonthJournal};
 use crate::filter::{Filter, Sort};
 use crate::recur;
 use crate::task::{Task, TaskId};
+use crate::workout::{
+    Exercise, ExerciseId, Routine, RoutineId, Session, SessionId, SessionLog, SetEntry,
+};
 
 /// Dates are stored ISO-8601 so they sort correctly as text in SQL.
 const DATE_FORMAT: &str = "%Y-%m-%d";
@@ -180,6 +183,268 @@ impl Store {
             )?;
             self.fold_day_journals_into_months()?;
         }
+
+        // v4 gives undo a counterpart. Redo is the same log walked the other
+        // way, so it is the same table twice rather than a new mechanism.
+        if version < 4 {
+            self.conn.execute_batch(
+                "CREATE TABLE redo_log (
+                     seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+                     kind    TEXT NOT NULL,
+                     task_id TEXT NOT NULL,
+                     before  TEXT
+                 );
+                 PRAGMA user_version = 4;",
+            )?;
+        }
+
+        // v5: a task can say how its subtask list should be read.
+        if version < 5 {
+            self.conn.execute_batch(
+                "ALTER TABLE tasks ADD COLUMN checklist TEXT NOT NULL DEFAULT 'all';
+                 PRAGMA user_version = 5;",
+            )?;
+        }
+
+        // v6: the workout book. Four tables that mirror the spreadsheet this
+        // replaces — a page, its rows, a dated run of the page, and the sets.
+        if version < 6 {
+            self.conn.execute_batch(
+                "CREATE TABLE routines (
+                     id       TEXT PRIMARY KEY,
+                     name     TEXT NOT NULL,
+                     position INTEGER NOT NULL DEFAULT 0
+                 );
+
+                 CREATE TABLE exercises (
+                     id       TEXT PRIMARY KEY,
+                     routine  TEXT NOT NULL,
+                     name     TEXT NOT NULL,
+                     position INTEGER NOT NULL DEFAULT 0
+                 );
+                 CREATE INDEX exercises_routine ON exercises (routine);
+
+                 CREATE TABLE sessions (
+                     id      TEXT PRIMARY KEY,
+                     routine TEXT NOT NULL,
+                     date    TEXT NOT NULL,
+                     note    TEXT NOT NULL DEFAULT ''
+                 );
+                 CREATE INDEX sessions_routine ON sessions (routine, date);
+
+                 CREATE TABLE sets (
+                     session  TEXT NOT NULL,
+                     exercise TEXT NOT NULL,
+                     idx      INTEGER NOT NULL,
+                     reps     INTEGER NOT NULL DEFAULT 0,
+                     weight   REAL NOT NULL DEFAULT 0,
+                     PRIMARY KEY (session, exercise, idx)
+                 );
+                 PRAGMA user_version = 6;",
+            )?;
+        }
+        Ok(())
+    }
+
+    // ---------- the workout book ----------
+
+    pub fn routines(&self) -> Result<Vec<Routine>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, position FROM routines ORDER BY position, name COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, name, position) = row?;
+            out.push(Routine { id: parse_id(&id), name, position });
+        }
+        Ok(out)
+    }
+
+    pub fn add_routine(&mut self, name: &str) -> Result<Routine> {
+        let next: i64 = self.conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM routines",
+            [],
+            |r| r.get(0),
+        )?;
+        let routine = Routine::new(name.trim(), next);
+        self.save_routine(&routine)?;
+        Ok(routine)
+    }
+
+    pub fn save_routine(&mut self, routine: &Routine) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO routines (id, name, position) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET name = ?2, position = ?3",
+            params![routine.id.to_string(), routine.name, routine.position],
+        )?;
+        Ok(())
+    }
+
+    /// Removes a routine and everything recorded under it.
+    pub fn delete_routine(&mut self, id: RoutineId) -> Result<()> {
+        let key = id.to_string();
+        self.conn.execute(
+            "DELETE FROM sets WHERE session IN (SELECT id FROM sessions WHERE routine = ?1)",
+            params![key],
+        )?;
+        self.conn.execute("DELETE FROM sessions WHERE routine = ?1", params![key])?;
+        self.conn.execute("DELETE FROM exercises WHERE routine = ?1", params![key])?;
+        self.conn.execute("DELETE FROM routines WHERE id = ?1", params![key])?;
+        Ok(())
+    }
+
+    pub fn exercises(&self, routine: RoutineId) -> Result<Vec<Exercise>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, position FROM exercises WHERE routine = ?1 ORDER BY position",
+        )?;
+        let rows = stmt.query_map(params![routine.to_string()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, name, position) = row?;
+            out.push(Exercise { id: parse_id(&id), routine, name, position });
+        }
+        Ok(out)
+    }
+
+    pub fn add_exercise(&mut self, routine: RoutineId, name: &str) -> Result<Exercise> {
+        let next: i64 = self.conn.query_row(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM exercises WHERE routine = ?1",
+            params![routine.to_string()],
+            |r| r.get(0),
+        )?;
+        let exercise = Exercise::new(routine, name.trim(), next);
+        self.save_exercise(&exercise)?;
+        Ok(exercise)
+    }
+
+    pub fn save_exercise(&mut self, exercise: &Exercise) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO exercises (id, routine, name, position) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(id) DO UPDATE SET routine = ?2, name = ?3, position = ?4",
+            params![
+                exercise.id.to_string(),
+                exercise.routine.to_string(),
+                exercise.name,
+                exercise.position
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_exercise(&mut self, id: ExerciseId) -> Result<()> {
+        self.conn.execute("DELETE FROM sets WHERE exercise = ?1", params![id.to_string()])?;
+        self.conn.execute("DELETE FROM exercises WHERE id = ?1", params![id.to_string()])?;
+        Ok(())
+    }
+
+    /// The most recent sessions of a routine, newest first.
+    pub fn sessions(&self, routine: RoutineId, limit: u32) -> Result<Vec<SessionLog>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, date, note FROM sessions WHERE routine = ?1
+             ORDER BY date DESC, rowid DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![routine.to_string(), limit], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        })?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, date, note) = row?;
+            let Ok(date) = NaiveDate::parse_from_str(&date, DATE_FORMAT) else { continue };
+            let id = parse_id(&id);
+            out.push(SessionLog {
+                sets: self.sets(id)?,
+                session: Session { id, routine, date, note },
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn sets(&self, session: SessionId) -> Result<Vec<SetEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT exercise, idx, reps, weight FROM sets WHERE session = ?1 ORDER BY idx",
+        )?;
+        let rows = stmt.query_map(params![session.to_string()], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, u32>(2)?,
+                row.get::<_, f64>(3)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (exercise, index, reps, weight) = row?;
+            out.push(SetEntry { exercise: parse_id(&exercise), index, reps, weight });
+        }
+        Ok(out)
+    }
+
+    /// Starts a session, carrying the previous one's numbers across.
+    ///
+    /// Copying last time is the difference between logging a workout and
+    /// re-typing it: almost every set repeats, and the ones that change are the
+    /// interesting ones.
+    pub fn start_session(&mut self, routine: RoutineId, date: NaiveDate) -> Result<SessionLog> {
+        let previous = self.sessions(routine, 1)?.into_iter().next();
+        let session = Session::new(routine, date);
+        self.conn.execute(
+            "INSERT INTO sessions (id, routine, date, note) VALUES (?1, ?2, ?3, '')",
+            params![
+                session.id.to_string(),
+                routine.to_string(),
+                date.format(DATE_FORMAT).to_string()
+            ],
+        )?;
+
+        let mut sets = Vec::new();
+        if let Some(previous) = previous {
+            for set in previous.sets {
+                self.save_set(session.id, set)?;
+                sets.push(set);
+            }
+        }
+        Ok(SessionLog { session, sets })
+    }
+
+    pub fn save_set(&mut self, session: SessionId, set: SetEntry) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO sets (session, exercise, idx, reps, weight) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(session, exercise, idx) DO UPDATE SET reps = ?4, weight = ?5",
+            params![session.to_string(), set.exercise.to_string(), set.index, set.reps, set.weight],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_set(
+        &mut self,
+        session: SessionId,
+        exercise: ExerciseId,
+        index: u32,
+    ) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM sets WHERE session = ?1 AND exercise = ?2 AND idx = ?3",
+            params![session.to_string(), exercise.to_string(), index],
+        )?;
+        Ok(())
+    }
+
+    pub fn save_session_note(&mut self, session: SessionId, note: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE sessions SET note = ?2 WHERE id = ?1",
+            params![session.to_string(), note],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_session(&mut self, session: SessionId) -> Result<()> {
+        self.conn.execute("DELETE FROM sets WHERE session = ?1", params![session.to_string()])?;
+        self.conn.execute("DELETE FROM sessions WHERE id = ?1", params![session.to_string()])?;
         Ok(())
     }
 
@@ -222,12 +487,12 @@ impl Store {
         self.conn.execute(
             "INSERT INTO tasks
                  (id, title, notes, due, time, recurrence, exceptions,
-                  priority, tags, project, subtasks, completed_at, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                  priority, tags, project, subtasks, completed_at, created_at, checklist)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
              ON CONFLICT(id) DO UPDATE SET
                  title = ?2, notes = ?3, due = ?4, time = ?5, recurrence = ?6,
                  exceptions = ?7, priority = ?8, tags = ?9, project = ?10,
-                 subtasks = ?11, completed_at = ?12, created_at = ?13",
+                 subtasks = ?11, completed_at = ?12, created_at = ?13, checklist = ?14",
             params![
                 r.id,
                 r.title,
@@ -242,6 +507,7 @@ impl Store {
                 r.subtasks,
                 r.completed_at,
                 r.created_at,
+                r.checklist,
             ],
         )?;
         Ok(())
@@ -302,20 +568,38 @@ impl Store {
         Ok(())
     }
 
-    /// Reverses the most recent mutation. Returns `None` when there is nothing
-    /// left to undo.
+    /// Reverses the most recent mutation, and remembers it so redo can put it
+    /// back. Returns `None` when there is nothing left to undo.
     pub fn undo(&mut self) -> Result<Option<Undone>> {
+        self.step("undo_log", "redo_log")
+    }
+
+    /// Replays the last thing undone. Cleared as soon as anything else is
+    /// written, because a redo onto a changed world is not the same act.
+    pub fn redo(&mut self) -> Result<Option<Undone>> {
+        self.step("redo_log", "undo_log")
+    }
+
+    /// Pops the newest entry off `from`, pushes the state it is about to
+    /// replace onto `onto`, and applies it. Undo and redo are the same walk in
+    /// opposite directions, so they are the same code.
+    fn step(&mut self, from: &str, onto: &str) -> Result<Option<Undone>> {
         let entry: Option<(i64, String, String, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT seq, kind, task_id, before FROM undo_log ORDER BY seq DESC LIMIT 1",
+                &format!("SELECT seq, kind, task_id, before FROM {from} ORDER BY seq DESC LIMIT 1"),
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()?;
 
         let Some((seq, kind, task_id, before)) = entry else { return Ok(None) };
-        self.conn.execute("DELETE FROM undo_log WHERE seq = ?1", params![seq])?;
+        self.conn.execute(&format!("DELETE FROM {from} WHERE seq = ?1"), params![seq])?;
+
+        // What the world looks like now becomes the other log's entry.
+        let id = uuid::Uuid::parse_str(&task_id).ok();
+        let current = id.and_then(|id| self.get(id).ok().flatten());
+        self.push(onto, &kind, &task_id, current.as_ref())?;
 
         let kind = UndoKind::parse(&kind);
         let task = match before {
@@ -336,21 +620,36 @@ impl Store {
 
     /// Whether anything can be undone, for enabling the menu item.
     pub fn can_undo(&self) -> Result<bool> {
-        let count: i64 = self.conn.query_row("SELECT COUNT(*) FROM undo_log", [], |r| r.get(0))?;
+        self.log_has("undo_log")
+    }
+
+    pub fn can_redo(&self) -> Result<bool> {
+        self.log_has("redo_log")
+    }
+
+    fn log_has(&self, table: &str) -> Result<bool> {
+        let count: i64 =
+            self.conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?;
         Ok(count > 0)
     }
 
     fn record_undo(&self, kind: UndoKind, id: TaskId, before: Option<&Task>) -> Result<()> {
-        let json = before.map(serde_json::to_string).transpose()?;
+        self.push("undo_log", kind.as_str(), &id.to_string(), before)?;
+        // A fresh edit makes any redo meaningless: it would replay onto a world
+        // that has moved on.
+        self.conn.execute("DELETE FROM redo_log", [])?;
+        Ok(())
+    }
+
+    fn push(&self, table: &str, kind: &str, id: &str, state: Option<&Task>) -> Result<()> {
+        let json = state.map(serde_json::to_string).transpose()?;
         self.conn.execute(
-            "INSERT INTO undo_log (kind, task_id, before) VALUES (?1, ?2, ?3)",
-            params![kind.as_str(), id.to_string(), json],
+            &format!("INSERT INTO {table} (kind, task_id, before) VALUES (?1, ?2, ?3)"),
+            params![kind, id, json],
         )?;
         // Trim the oldest entries past the depth limit.
         self.conn.execute(
-            "DELETE FROM undo_log WHERE seq <= (
-                 SELECT MAX(seq) FROM undo_log
-             ) - ?1",
+            &format!("DELETE FROM {table} WHERE seq <= (SELECT MAX(seq) FROM {table}) - ?1"),
             params![UNDO_DEPTH],
         )?;
         Ok(())
@@ -626,4 +925,10 @@ fn collect_day_logs(
         });
     }
     Ok(logs)
+}
+
+/// A stored id that will not parse is unreadable rather than wrong; a fresh one
+/// keeps the row usable instead of failing the whole query.
+fn parse_id(text: &str) -> uuid::Uuid {
+    uuid::Uuid::parse_str(text).unwrap_or_else(|_| uuid::Uuid::new_v4())
 }

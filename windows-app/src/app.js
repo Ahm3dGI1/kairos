@@ -7,9 +7,10 @@
 import { createCapture } from './capture.js';
 import { renderDetail } from './detail.js';
 import { createHabits } from './habits.js';
+import { createWorkout } from './workout.js';
 import { call, clear, el, listen, parseDate, toIso, today } from './shared.js';
 
-const PAGES = ['agenda', 'calendar', 'habits'];
+const PAGES = ['agenda', 'calendar', 'habits', 'workout'];
 
 const state = {
   page: 'agenda',
@@ -32,7 +33,8 @@ for (const id of [
   'error-bar', 'here', 'count', 'status-tools', 'agenda', 'empty', 'agenda-page',
   'calendar-page', 'cal-dow', 'cal-grid', 'habits-page', 'habit-rows', 'journal',
   'summary', 'detail', 'toast', 'capture', 'capture-hint', 'preview', 'quick-add',
-  'highlight', 'page-agenda', 'page-calendar', 'page-habits', 'sticky-toggle',
+  'highlight', 'page-agenda', 'page-calendar', 'page-habits', 'page-workout',
+  'sticky-toggle', 'lists', 'routines', 'workout-page', 'workout-grid', 'workout-empty',
 ]) {
   dom[id] = document.getElementById(id);
 }
@@ -75,6 +77,17 @@ const habits = createHabits({
   },
 });
 
+const workout = createWorkout({
+  routinesNode: dom.routines,
+  gridNode: dom['workout-grid'],
+  emptyNode: dom['workout-empty'],
+  onRoutine: (name, sessions) => {
+    if (state.page !== 'workout') return;
+    dom.here.textContent = name;
+    dom.count.textContent = `${sessions} session${sessions === 1 ? '' : 's'}`;
+  },
+});
+
 // ---------- data ----------
 
 async function refresh() {
@@ -82,6 +95,10 @@ async function refresh() {
 
   if (state.page === 'habits') {
     await habits.load();
+  } else if (state.page === 'workout') {
+    await workout.load();
+    renderWorkoutTools();
+    return;
   } else {
     await loadAgenda();
     if (state.page === 'calendar') await renderCalendar();
@@ -115,7 +132,8 @@ async function loadAgenda() {
 // ---------- the status line ----------
 
 function renderStatus() {
-  if (state.page === 'habits') return; // the habits module owns its own line
+  // Those two pages own their own line.
+  if (state.page === 'habits' || state.page === 'workout') return;
 
   const open = state.rows.filter((t) => !t.completed_at).length;
   if (state.page === 'calendar') {
@@ -133,10 +151,10 @@ function renderStatus() {
   dom.here.textContent = state.search
     ? `search: ${state.search}`
     : state.project
-      ? `@${state.project}`
+      ? state.project
       : state.tag
         ? `#${state.tag}`
-        : 'everything';
+        : 'Tasks';
   dom.count.textContent = `${open} open`;
   clear(dom['status-tools']);
 
@@ -159,25 +177,7 @@ function renderStatus() {
   });
   dom['status-tools'].appendChild(search);
 
-  const filters = el('span', { class: 'filters' });
-  const chipFor = (kind, name) =>
-    el('button', {
-      type: 'button',
-      class: state[kind] === name ? 'on' : '',
-      text: kind === 'tag' ? `#${name}` : `@${name}`,
-      // Clicking the active one clears it, so a filter is never a trap.
-      onclick: () => {
-        state[kind] = state[kind] === name ? null : name;
-        state.cursor = 0;
-        refresh();
-      },
-    });
-  for (const name of state.projects.slice(0, 3)) filters.append(' ', chipFor('project', name));
-  for (const name of state.tags.slice(0, 3)) filters.append(' ', chipFor('tag', name));
-  dom['status-tools'].appendChild(filters);
-
-  dom['status-tools'].append(
-    ' ',
+  dom['status-tools'].appendChild(
     el('button', {
       type: 'button',
       class: state.showCompleted ? 'on' : '',
@@ -190,6 +190,73 @@ function renderStatus() {
       },
     }),
   );
+  renderLists();
+}
+
+function renderWorkoutTools() {
+  clear(dom['status-tools']);
+  dom['status-tools'].appendChild(
+    el('button', {
+      type: 'button',
+      class: 'on',
+      text: 'S start session',
+      title: "Starts today's session with last time's numbers",
+      onclick: startSession,
+    }),
+  );
+}
+
+/** The second sidebar: the lists a task can belong to, and the tags in use. */
+function renderLists() {
+  clear(dom.lists);
+
+  dom.lists.appendChild(el('div', { class: 'lists-head', text: 'LISTS' }));
+  dom.lists.appendChild(
+    el('button', {
+      type: 'button',
+      class: `list-row ${!state.project && !state.tag ? 'on' : ''}`.trim(),
+      onclick: () => {
+        state.project = null;
+        state.tag = null;
+        state.cursor = 0;
+        refresh();
+      },
+    }, [el('span', { class: 'name', text: 'All tasks' })]),
+  );
+
+  for (const name of state.projects) {
+    dom.lists.appendChild(
+      el('button', {
+        type: 'button',
+        class: `list-row ${state.project === name ? 'on' : ''}`.trim(),
+        // Clicking the active one clears it, so a list is never a trap.
+        onclick: () => {
+          state.project = state.project === name ? null : name;
+          state.tag = null;
+          state.cursor = 0;
+          refresh();
+        },
+      }, [el('span', { class: 'name', text: name })]),
+    );
+  }
+
+  if (state.tags.length) {
+    dom.lists.appendChild(el('div', { class: 'lists-head', text: 'TAGS' }));
+    for (const name of state.tags) {
+      dom.lists.appendChild(
+        el('button', {
+          type: 'button',
+          class: `list-row ${state.tag === name ? 'on' : ''}`.trim(),
+          onclick: () => {
+            state.tag = state.tag === name ? null : name;
+            state.project = null;
+            state.cursor = 0;
+            refresh();
+          },
+        }, [el('span', { class: 'name', text: `#${name}` })]),
+      );
+    }
+  }
 }
 
 function renderCalendarTools() {
@@ -358,6 +425,9 @@ function renderPane() {
       addSubtask: async (t, title) => {
         await call('add_subtask', { id: t.id, title }, 'Subtask');
         await refresh();
+        // The pane is rebuilt on refresh, so focus has to be put back or the
+        // next item typed lands in whatever the global shortcuts do with it.
+        dom.detail.querySelector('.add-row input')?.focus();
       },
     },
   });
@@ -485,6 +555,20 @@ async function undo() {
   refresh();
 }
 
+async function redo() {
+  const result = await call('redo', undefined, 'Redo');
+  if (!result) {
+    toast('nothing to redo');
+    return;
+  }
+  toast(result.title ? `redid ${result.label}: ${result.title}` : `redid ${result.label}`);
+  refresh();
+}
+
+async function startSession() {
+  if (await workout.startSession()) toast("today's session started from last time");
+}
+
 /** Every destructive act leaves one, with the key that reverses it. */
 function toast(message, undoable = false) {
   clear(dom.toast);
@@ -504,9 +588,10 @@ function toast(message, undoable = false) {
 // ---------- pages ----------
 
 const HINTS = {
-  agenda: 'J K move · X done · U undo',
+  agenda: 'J K move · X done · U undo · Y redo',
   calendar: 'H L month · T today · Enter opens',
   habits: 'H L month · Space toggles today',
+  workout: 'S starts today · double-click renames',
 };
 
 function setPage(page) {
@@ -518,6 +603,8 @@ function setPage(page) {
   dom.detail.hidden = page !== 'agenda';
   dom['capture-hint'].textContent = HINTS[page];
   // The bar captures a task on two pages and a journal line on the third.
+  dom.capture.hidden = page === 'workout';
+  dom.preview.hidden = page === 'workout';
   dom['quick-add'].placeholder =
     page === 'habits'
       ? `note for ${state.todayDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}…   (+name adds a habit)`
@@ -532,7 +619,7 @@ function takesKeys(target) {
   if (!(target instanceof Element) || target === dom.agenda) return false;
   return (
     target.matches('input, textarea, select, button, a[href], [contenteditable="true"]') ||
-    target.closest('.detail, .pop, .journal, .habit-rows') !== null
+    target.closest('.detail, .pop, .journal, .habit-rows, .workout-grid, .lists') !== null
   );
 }
 
@@ -563,7 +650,13 @@ document.addEventListener('keydown', (event) => {
 
   if (event.ctrlKey && event.key.toLowerCase() === 'z' && !typing) {
     event.preventDefault();
-    undo();
+    if (event.shiftKey) redo();
+    else undo();
+    return;
+  }
+  if (event.ctrlKey && event.key.toLowerCase() === 'y' && !typing) {
+    event.preventDefault();
+    redo();
     return;
   }
   if (typing) return;
@@ -629,6 +722,16 @@ document.addEventListener('keydown', (event) => {
       event.preventDefault();
       undo();
       break;
+    case 'y':
+      event.preventDefault();
+      redo();
+      break;
+    case 's':
+      if (state.page === 'workout') {
+        event.preventDefault();
+        startSession();
+      }
+      break;
     case 'r':
       // Puts back the last phrase taken off with backspace.
       event.preventDefault();
@@ -641,6 +744,7 @@ document.addEventListener('keydown', (event) => {
     case '1':
     case '2':
     case '3':
+    case '4':
       event.preventDefault();
       setPage(PAGES[Number(key) - 1]);
       break;

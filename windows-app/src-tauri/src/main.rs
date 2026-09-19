@@ -12,6 +12,7 @@ mod daily_commands;
 mod reminders;
 mod shell;
 mod state;
+mod workout_commands;
 
 fn main() {
     tauri::Builder::default()
@@ -47,7 +48,9 @@ fn main() {
             commands::skip_occurrence,
             commands::reschedule_occurrence,
             commands::undo,
+            commands::redo,
             commands::can_undo,
+            commands::can_redo,
             commands::projects,
             commands::tags,
             commands::calendar_month,
@@ -66,6 +69,17 @@ fn main() {
             daily_commands::save_journal_entry,
             daily_commands::delete_journal_entry,
             daily_commands::current_month_pair,
+            workout_commands::workout_page,
+            workout_commands::add_routine,
+            workout_commands::rename_routine,
+            workout_commands::delete_routine,
+            workout_commands::add_exercise,
+            workout_commands::rename_exercise,
+            workout_commands::delete_exercise,
+            workout_commands::start_session,
+            workout_commands::save_set,
+            workout_commands::save_session_note,
+            workout_commands::delete_session,
             shell::hide_window,
             shell::toggle_widget_command,
             shell::show_main_window,
