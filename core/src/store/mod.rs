@@ -9,6 +9,7 @@
 //! works after a restart.
 
 mod row;
+mod snapshot;
 
 use std::collections::{HashMap, HashSet};
 
@@ -87,6 +88,8 @@ impl UndoKind {
         }
     }
 }
+
+pub use snapshot::Snapshot;
 
 pub struct Store {
     conn: Connection,
@@ -825,7 +828,7 @@ impl Store {
     }
 
     /// Every recorded day, for the rare operation that has to touch all of them.
-    fn all_day_logs(&self) -> Result<Vec<DayLog>> {
+    pub(crate) fn all_day_logs(&self) -> Result<Vec<DayLog>> {
         let mut stmt = self.conn.prepare(
             "SELECT date, journal, screen_minutes, sleep_minutes, habits_done
              FROM day_logs ORDER BY date",
