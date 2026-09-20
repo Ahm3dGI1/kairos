@@ -20,9 +20,18 @@ const QUICK_ADD_HOTKEY: (Modifiers, Code) =
     (Modifiers::CONTROL.union(Modifiers::SHIFT), Code::Space);
 
 pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let settings = crate::settings_commands::current(app);
     build_auxiliary_windows(app)?;
-    build_tray(app)?;
-    register_hotkey(app)?;
+    // The tray and the hotkey claim things outside the app — an icon in the
+    // notification area, a key combination the whole system routes here — so
+    // when they are off they are not built at all rather than built and
+    // hidden. That is why both are the switches that ask for a restart.
+    if settings.tray_icon {
+        build_tray(app, settings.sticky_note)?;
+    }
+    if settings.global_hotkey {
+        register_hotkey(app)?;
+    }
     Ok(())
 }
 
@@ -60,13 +69,17 @@ fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+fn build_tray(app: &AppHandle, sticky: bool) -> Result<(), Box<dyn std::error::Error>> {
     let open = MenuItem::with_id(app, "open", "Open Master Todo", true, None::<&str>)?;
     let quick = MenuItem::with_id(app, "quick", "Quick add\tCtrl+Shift+Space", true, None::<&str>)?;
     let widget = MenuItem::with_id(app, "widget", "Toggle sticky note", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quick, &widget, &separator, &quit])?;
+    let menu = if sticky {
+        Menu::with_items(app, &[&open, &quick, &widget, &separator, &quit])?
+    } else {
+        Menu::with_items(app, &[&open, &quick, &separator, &quit])?
+    };
 
     let mut builder = TrayIconBuilder::with_id("tray")
         .menu(&menu)
@@ -129,6 +142,9 @@ pub fn toggle_quick_add(app: &AppHandle) {
 }
 
 pub fn toggle_widget(app: &AppHandle) {
+    if !crate::settings_commands::current(app).sticky_note {
+        return;
+    }
     let Some(window) = app.get_webview_window("widget") else { return };
     if window.is_visible().unwrap_or(false) {
         let _ = window.hide();

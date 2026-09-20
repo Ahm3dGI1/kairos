@@ -30,7 +30,7 @@ Phase 1 is built; the later platforms are still open. Do not treat a candidate a
 | ------------- | ----------------------------------------------- | -------------- |
 | Core logic    | Rust — `mtodo-core`: parse, recur, store         | Built          |
 | Windows shell | Tauri v2 — no bundler, static frontend           | Built          |
-| Local storage | SQLite via `rusqlite`, per device                | Built          |
+| Storage       | Markdown vault; SQLite as a rebuilt index        | Built          |
 | Sync server   | Postgres + realtime, or a custom minimal server  | Candidate      |
 | Linux client  | Rust TUI (ratatui) or the existing Go/Bubbletea  | **Open** (§6)  |
 | Mobile client | React Native or Flutter                          | **Open** (§6)  |
@@ -48,7 +48,7 @@ separate repos only if independent maintainers take over a platform. `/core` and
 are built; the rest are README stubs.
 
 ```
-/core          task model, NL parsing, recurrence, SQLite store  (crate mtodo-core)
+/core          task model, NL parsing, recurrence, vault, store   (crate mtodo-core)
 /windows-app   Tauri shell: tray, widget, hotkey, calendar, UI    (crate mtodo-windows)
 /linux-app     terminal client                                       (future)
 /mobile-app    React Native or Flutter client                        (future)
@@ -73,6 +73,11 @@ cargo tauri build               # installers -> target/release/bundle
 - **`/core` owns all task semantics.** Parsing, recurrence, and the task model live there and
   nowhere else. Clients are presentation and platform integration only — a Tauri command should be
   a thin wrapper over a core call, never a place where a rule gets restated.
+- **The files are the system of record.** `/core/src/vault` owns a folder of Markdown files that
+  holds every task, habit and workout; the SQLite database is an index rebuilt from it. Deleting
+  the database must cost nothing. Any new kind of data needs a text form before it is done, and
+  `Snapshot` is the only seam between the two — the store never learns about files, the vault
+  never learns about SQL.
 - **Offline-first is a hard requirement, not a fallback.** A feature that stops working without
   a network is a bug; sync reconciles later and is never in the critical path.
 - **Self-hosting is the deployment model.** No dependency on a service the project would have

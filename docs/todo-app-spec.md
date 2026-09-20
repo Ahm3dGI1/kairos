@@ -30,7 +30,13 @@ Rationale: one maintainer, one shared core depended on by every client — a mon
   - Global hotkey — Spotlight-style quick-add/quick-open overlay
 - **Linux shell** *(future)*: terminal UI — either extends the existing Go/Bubbletea todo project or a new Rust TUI (ratatui) sharing the Rust core.
 - **Mobile shell** *(future)*: React Native or Flutter.
-- **Sync & hosting**: local-first. Each device holds a local SQLite store; sync is an optional layer via a lightweight, self-hostable sync server (e.g. Supabase-style Postgres + realtime, or a custom minimal server). Users self-host their own instance — no centrally-hosted service, no accounts to manage on your end.
+- **Storage** *(decided, built)*: a **vault of plain text files is the system of record**, and the local SQLite store is an index rebuilt from it. Deleting the database costs nothing; deleting the vault is what loses data. The reasoning is the vision's: an app whose data you cannot open in a text editor is one you do not own, and "no lock-in" has to mean something stronger than an export button. The formats are the ones a person would have written anyway — a task is a Markdown checklist item, a habit month is a list of days, a workout is `- Bench press: 10x60, 8x65` — so the same folder is legible to the user, to Obsidian, and to an AI agent pointed at it.
+  - Metadata on a task line is read as a **suffix**, so ordinary prose in a title is never eaten.
+  - A line with **no `^id` is new** and goes through the natural-language parser, so typing `- [ ] gym every day 5pm` into a file is the same act as typing it into the capture bar. Lines that carry an id are read literally.
+  - Writing is content-addressed — a file is touched only when what it should hold differs from what it does — which is what stops the file watcher chasing the app's own writes.
+  - `Snapshot` is the only seam: the store never learns about files, the vault never learns about SQL.
+- **Settings** *(decided, built)*: one switch per feature, defined in the core so every shell offers the same list, stored as `settings.json` inside the vault. A preference you cannot read without launching the app is one you cannot fix when the app will not launch.
+- **Sync & hosting**: local-first. Each device holds a local vault and its SQLite index; sync is an optional layer via a lightweight, self-hostable sync server (e.g. Supabase-style Postgres + realtime, or a custom minimal server). Users self-host their own instance — no centrally-hosted service, no accounts to manage on your end. A text vault also makes the crude version of sync — put the folder in Dropbox or a git repo — work without any server at all.
 - **Auth (v1)**: none. Device-to-own-sync-instance uses a shared API key/secret. Full OAuth (Google sign-in) is a stretch goal only if this becomes a hosted multi-tenant product later.
 - **Offline-first**: full functionality with no network connection; sync reconciles when back online.
 
@@ -77,6 +83,8 @@ Separate from tasks, because a habit is not a task: a task is done once and gone
 - Offline-first (core requirement, not a fallback)
 - Undo for deletions/completions
 - Reminders/notifications
+- Data in plain text the user owns, readable and editable without the app
+- A JSON backup of the database before any import replaces it, last five kept
 
 ## 5. Stretch Goals (post-v1)
 

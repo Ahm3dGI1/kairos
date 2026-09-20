@@ -84,7 +84,7 @@ impl Vault {
         let mut expected = HashSet::new();
         for (project, mut group) in by_project {
             // A stable order, so the file does not reshuffle between writes.
-            group.sort_by(|a, b| (a.due, a.created_at, a.id).cmp(&(b.due, b.created_at, b.id)));
+            group.sort_by_key(|t| (t.due, t.created_at, t.id));
             let name = format!("{}.md", tasks::slug(project.as_deref()));
             expected.insert(name.clone());
             changed |=

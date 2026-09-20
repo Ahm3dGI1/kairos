@@ -80,8 +80,11 @@
   --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
 }
 
+/* Light comes from Windows unless the Settings page overrides it. The
+   media query is guarded so an explicit "dark" choice wins over the system,
+   and the same declarations are repeated for an explicit "light". */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme='dark']) {
     color-scheme: light;
 
     --bg: #fbfbf9;
@@ -141,6 +144,67 @@
     --habit-miss: #f3e3e0;
     --habit-miss-line: #e0c4bf;
   }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #fbfbf9;
+  --panel: #f4f4f1;
+  --raised: #ffffff;
+  --toast: #ffffff;
+  --cell-off: #f6f6f3;
+
+  --line: #e4e4de;
+  --line-quiet: #eaeae4;
+  --line-faint: #efefe9;
+  --edge: #dedcd4;
+  --edge-strong: #cfcdc4;
+
+  --text-max: #17170f;
+  --text-bright: #17170f;
+  --text: #3a3a33;
+  --text-2: #5a5a52;
+  --text-3: #5a5a52;
+  --text-dim: #7a7a72;
+  --text-faint: #94948c;
+  --text-fainter: #94948c;
+  --text-ghost: #a8a89e;
+  --text-quiet: #c2c2ba;
+  --dot: #dcdcd4;
+
+  --accent: #8a6510;
+  --accent-hover: #6f5109;
+  --accent-bg: #faf3e0;
+  --accent-line: #ecdcb4;
+  --accent-rail: #f3ecd9;
+  --accent-bar: #b8892a;
+
+  --danger: #b3352a;
+  --danger-line: #f0dcd8;
+  --danger-check: #c99188;
+
+  --check-strong: #8a8a80;
+  --check: #a8a89e;
+  --check-dim: #c2c2ba;
+  --check-done: #b6b6ac;
+
+  --chip-bg: #f1f1ec;
+  --chip-line: #e4e4de;
+
+  --when-bg: #eaf2f7;
+  --when-line: #7fa9bf;
+  --when-text: #2f5e75;
+  --where-bg: #eef3e9;
+  --where-line: #89ab73;
+  --where-text: #4a6b36;
+  --much-bg: #f8f0dd;
+  --much-line: #c6a55c;
+  --much-text: #8a6510;
+
+  --habit-done: #7f9c6d;
+  --habit-miss: #f3e3e0;
+  --habit-miss-line: #e0c4bf;
 }
 
 * {
@@ -1613,4 +1677,192 @@ select {
   .lists {
     display: none;
   }
+}
+
+/* ---------- settings ----------
+   The one page that is a form. It keeps the same density as everything else —
+   26px is still the beat — but a switch is the widest thing on a row, so the
+   label and its reason carry the left edge and the control sits at the right. */
+
+.settings {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 12px;
+}
+
+.settings-group {
+  padding: 0 20px 18px;
+}
+
+.setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.setting:last-child {
+  border-bottom: 0;
+}
+
+.setting-text {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.setting-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.setting-detail {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* Said once, quietly, on the switches that cannot take effect until the app
+   is started again — rather than a dialog after the fact. */
+.restart {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 1px 4px;
+}
+
+.switch {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 17px;
+  margin-top: 1px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 9px;
+  background: var(--cell-off);
+  cursor: pointer;
+  transition: background 90ms linear, border-color 90ms linear;
+}
+
+.switch .knob {
+  display: block;
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--text-ghost);
+  transition: transform 90ms linear, background 90ms linear;
+}
+
+.switch.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.switch.on .knob {
+  background: var(--accent);
+  transform: translateX(13px);
+}
+
+.switch:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.setting-choice,
+.setting-path {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--cell-off);
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  padding: 4px 7px;
+}
+
+.setting-path {
+  flex: 1 1 260px;
+  max-width: 340px;
+}
+
+.setting-choice:focus-visible,
+.setting-path:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.vault-tools {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--cell-off);
+}
+
+.vault-state {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vault-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.vault-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  white-space: nowrap;
+}
+
+.vault-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.ghost {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+
+.ghost:hover {
+  color: var(--text);
+  border-color: var(--edge-strong);
+}
+
+.vault-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.vault-note code {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
 }

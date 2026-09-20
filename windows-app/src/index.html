@@ -45,6 +45,15 @@
 
       <div class="spacer"></div>
 
+      <button id="page-settings" type="button" aria-label="Settings (5)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" />
+        </svg>
+        <span class="key">5</span>
+      </button>
+
       <button id="sticky-toggle" type="button" aria-label="Toggle the sticky note (W)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -103,6 +112,11 @@
             <p id="workout-empty" class="empty" hidden></p>
           </div>
         </div>
+      </div>
+
+      <!-- Settings: rendered from what the core says the switches are. -->
+      <div id="settings-page" class="page" hidden>
+        <div id="settings" class="settings"></div>
       </div>
 
       <!-- Capture lives at the bottom and is always there, never a modal. -->

@@ -51,7 +51,15 @@ export function createCapture({ input, layer, previewNode, getToday, onAdd, onJo
     return encoder.encode(text.slice(0, index)).length;
   }
 
+  // Off, the field is plain text. The parse still runs — the preview line
+  // under the bar still says what was understood — only the tints go.
+  let pills = true;
+
   function renderLayer(text) {
+    if (!pills) {
+      layer.textContent = text;
+      return;
+    }
     const marks = [
       ...spans.map((s) => ({ ...s, off: false })),
       ...excluded.map(([start, end]) => ({ start, end, field: null, off: true })),
@@ -243,6 +251,11 @@ export function createCapture({ input, layer, previewNode, getToday, onAdd, onJo
       if (next === mode) return;
       mode = next;
       reset();
+    },
+    setPills: (next) => {
+      if (next === pills) return;
+      pills = next;
+      renderLayer(input.value);
     },
   };
 }

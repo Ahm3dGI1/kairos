@@ -44,7 +44,13 @@ pub fn start(app: &AppHandle) {
 }
 
 fn tick(app: &AppHandle) {
+    // The tooltip is not a reminder — it is what the tray icon says when you
+    // hover it — so it keeps working either way.
     update_tooltip(app);
+
+    if !crate::settings_commands::current(app).reminders {
+        return;
+    }
 
     let now = Local::now().naive_local();
     for (id, title, time) in due_now(app, now.date(), now.time()) {

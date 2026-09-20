@@ -7,10 +7,14 @@
 import { createCapture } from './capture.js';
 import { renderDetail } from './detail.js';
 import { createHabits } from './habits.js';
+import { createSettings } from './settings.js';
 import { createWorkout } from './workout.js';
 import { call, clear, el, listen, parseDate, toIso, today } from './shared.js';
 
-const PAGES = ['agenda', 'calendar', 'habits', 'workout'];
+const PAGES = ['agenda', 'calendar', 'habits', 'workout', 'settings'];
+
+/** Pages a setting can switch off. Tasks and Settings are always reachable. */
+const OPTIONAL_PAGES = { calendar: 'calendar_page', habits: 'habits_page', workout: 'workout_page' };
 
 const state = {
   page: 'agenda',
@@ -26,6 +30,9 @@ const state = {
   month: null,
   projects: [],
   tags: [],
+  // What the core says is turned on. Read once at boot, then whenever the
+  // settings page changes something.
+  settings: {},
 };
 
 const dom = {};
@@ -35,11 +42,17 @@ for (const id of [
   'summary', 'detail', 'toast', 'capture', 'capture-hint', 'preview', 'quick-add',
   'highlight', 'page-agenda', 'page-calendar', 'page-habits', 'page-workout',
   'sticky-toggle', 'lists', 'routines', 'workout-page', 'workout-grid', 'workout-empty',
+  'page-settings', 'settings-page', 'settings',
 ]) {
   dom[id] = document.getElementById(id);
 }
 
 // ---------- capture ----------
+
+const settings = createSettings({
+  container: dom.settings,
+  onChange: loadSettings,
+});
 
 const capture = createCapture({
   input: dom['quick-add'],
@@ -93,6 +106,12 @@ const workout = createWorkout({
 async function refresh() {
   state.todayDate = (await today()) ?? new Date();
 
+  if (state.page === 'settings') {
+    await settings.load();
+    renderStatus();
+    return;
+  }
+
   if (state.page === 'habits') {
     await habits.load();
   } else if (state.page === 'workout') {
@@ -134,6 +153,13 @@ async function loadAgenda() {
 function renderStatus() {
   // Those two pages own their own line.
   if (state.page === 'habits' || state.page === 'workout') return;
+
+  if (state.page === 'settings') {
+    dom.here.textContent = TITLES.settings;
+    dom.count.textContent = '';
+    clear(dom['status-tools']);
+    return;
+  }
 
   const open = state.rows.filter((t) => !t.completed_at).length;
   if (state.page === 'calendar') {
@@ -448,18 +474,26 @@ async function renderCalendar() {
   const days = (await call('calendar_month', { year, month }, 'Calendar')) ?? [];
   const byDate = new Map(days.map((d) => [d.date, d.tasks]));
 
+  const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const mondayFirst = state.settings.week_starts_monday !== false;
+
   clear(dom['cal-dow']);
-  // Sunday-first, as the design has it.
-  for (const name of ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']) {
-    dom['cal-dow'].appendChild(el('span', { text: name }));
+  for (const index of mondayFirst ? [1, 2, 3, 4, 5, 6, 0] : [0, 1, 2, 3, 4, 5, 6]) {
+    dom['cal-dow'].appendChild(el('span', { text: DOW[index] }));
   }
 
   clear(dom['cal-grid']);
   const first = new Date(year, month - 1, 1);
-  const start = new Date(year, month - 1, 1 - first.getDay());
+  const lead = mondayFirst ? (first.getDay() + 6) % 7 : first.getDay();
+  const start = new Date(year, month - 1, 1 - lead);
   const todayIso = toIso(state.todayDate);
 
-  for (let i = 0; i < 35; i += 1) {
+  // Enough whole weeks to hold the month: a 31-day month that starts on the
+  // last day of the week needs six rows, and five would silently cut it off.
+  const length = new Date(year, month, 0).getDate();
+  const cells = Math.ceil((lead + length) / 7) * 7;
+
+  for (let i = 0; i < cells; i += 1) {
     const date = new Date(start);
     date.setDate(start.getDate() + i);
     const iso = toIso(date);
@@ -534,6 +568,7 @@ async function toggleComplete(task) {
 }
 
 async function remove(task) {
+  if (state.settings.confirm_delete && !window.confirm(`Delete "${task.title}"?`)) return;
   await call('delete_task', { id: task.id }, 'Deleting task');
   if (state.detailId === task.id) state.detailId = null;
   toast(`${task.title} deleted`, true);
@@ -592,9 +627,23 @@ const HINTS = {
   calendar: 'H L month · T today · Enter opens',
   habits: 'H L month · Space toggles today',
   workout: 'S starts today · double-click renames',
+  settings: 'every change saves itself',
+};
+
+const TITLES = {
+  agenda: 'Tasks',
+  calendar: 'Calendar',
+  habits: 'Habits',
+  workout: 'Workout',
+  settings: 'Settings',
 };
 
 function setPage(page) {
+  // A page that has been switched off is not somewhere to land, including via
+  // its number key or a stale state after the switch was flipped.
+  const off = OPTIONAL_PAGES[page];
+  if (off && state.settings[off] === false) page = 'agenda';
+
   state.page = page;
   for (const name of PAGES) {
     dom[`page-${name}`].classList.toggle('active', name === page);
@@ -602,9 +651,11 @@ function setPage(page) {
   }
   dom.detail.hidden = page !== 'agenda';
   dom['capture-hint'].textContent = HINTS[page];
-  // The bar captures a task on two pages and a journal line on the third.
-  dom.capture.hidden = page === 'workout';
-  dom.preview.hidden = page === 'workout';
+  // The bar captures a task on two pages and a journal line on the third;
+  // there is nothing to capture into on the workout book or in settings.
+  const noCapture = page === 'workout' || page === 'settings';
+  dom.capture.hidden = noCapture;
+  dom.preview.hidden = noCapture;
   dom['quick-add'].placeholder =
     page === 'habits'
       ? `note for ${state.todayDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}…   (+name adds a habit)`
@@ -745,6 +796,7 @@ document.addEventListener('keydown', (event) => {
     case '2':
     case '3':
     case '4':
+    case '5':
       event.preventDefault();
       setPage(PAGES[Number(key) - 1]);
       break;
@@ -763,8 +815,48 @@ dom['sticky-toggle'].addEventListener('click', () =>
 );
 
 listen('data-changed', () => refresh());
+listen('settings-changed', () => loadSettings());
+
+/**
+ * Reads the switches and reshapes the window around them.
+ *
+ * Called at boot and after every change, rather than each switch having its
+ * own handler: there is one place that knows what "habits page off" looks
+ * like, and it runs the same way whether the change came from this window or
+ * from someone editing settings.json in an editor.
+ */
+function applySettings() {
+  const s = state.settings;
+
+  // Theme. "system" means leave it to the media query.
+  if (s.theme && s.theme !== 'system') document.documentElement.dataset.theme = s.theme;
+  else delete document.documentElement.dataset.theme;
+
+  for (const [page, key] of Object.entries(OPTIONAL_PAGES)) {
+    dom[`page-${page}`].hidden = s[key] === false;
+  }
+  dom['sticky-toggle'].hidden = s.sticky_note === false;
+  dom.lists.hidden = s.lists_sidebar === false;
+  capture.setPills(s.parse_pills !== false);
+
+  // Standing on a page that has just been switched off.
+  const off = OPTIONAL_PAGES[state.page];
+  if (off && s[off] === false) setPage('agenda');
+}
+
+async function loadSettings() {
+  const values = await call('settings_values', undefined, 'Reading settings');
+  if (!values) return;
+  const first = !Object.keys(state.settings).length;
+  state.settings = values;
+  // Only at boot: after that, the toggle in the status line is the user's
+  // current choice and must not be overwritten under them.
+  if (first) state.showCompleted = values.show_completed;
+  applySettings();
+}
 
 async function boot() {
+  await loadSettings();
   await refresh();
   capture.focus();
 }

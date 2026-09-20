@@ -20,7 +20,8 @@ use crate::workout::{Exercise, Routine, SessionLog};
 /// Those stay out on purpose: they describe a session's history of edits, not
 /// the user's data, and replaying them against a world rebuilt from files would
 /// be undoing onto something that never happened.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Snapshot {
     pub tasks: Vec<Task>,
     pub habits: Vec<Habit>,

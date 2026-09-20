@@ -62,7 +62,7 @@ pub struct Settings {
     // Storage
     /// Mirror everything into plain-text files, and read external edits back.
     pub vault_enabled: bool,
-    /// Where those files live. Empty means the default beside the database.
+    /// Where those files live. Empty until the first run resolves it.
     pub vault_path: String,
 }
 
@@ -257,7 +257,7 @@ fn kind_of(key: &str) -> SettingKind {
                 ("light".into(), "Light".into()),
             ],
         },
-        "vault_path" => SettingKind::Path { placeholder: "Beside the database".into() },
+        "vault_path" => SettingKind::Path { placeholder: "Set on first run".into() },
         _ => SettingKind::Toggle,
     }
 }

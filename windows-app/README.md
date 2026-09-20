@@ -120,6 +120,13 @@ every device is independent.
   copies the last one's numbers so you adjust rather than retype.
 - **Recurring exceptions** — skip or push a single occurrence from the detail
   pane without breaking the series.
+- **Settings** — a page of switches for every feature above: which pages appear
+  in the rail, whether capture tints what it parsed, the tray icon, the global
+  hotkey, reminders, the theme, which day a week starts on, and the vault. The
+  list is defined in [`/core`](../core/src/settings.rs) so a Linux client would
+  offer the same switches, and the page renders whatever the core describes.
+  The few that cannot take effect until a restart say so on the row rather
+  than pretending otherwise.
 - **Reminders** — a Windows notification when a task's time arrives. The loop
   polls rather than scheduling a timer per task: tasks move, recurrence shifts
   and machines sleep, and a poll survives all three where scheduled timers go
@@ -149,7 +156,7 @@ The app is keyboard-first; the mouse is optional everywhere.
 | `Y` or `Ctrl+Shift+Z` | redo |
 | `S` | start today's session (Workout) |
 | `W` | toggle the sticky note |
-| `1`–`4` | Tasks, Calendar, Habits, Workout |
+| `1`–`5` | Tasks, Calendar, Habits, Workout, Settings |
 | `Esc` | close the pane, clear the search, dismiss the overlay |
 | `Ctrl+Shift+Space` | quick-add overlay, from anywhere in Windows |
 
@@ -161,6 +168,7 @@ src/                 frontend — no build step
   capture.js           the capture field: parse pills and backspace-to-revert
   detail.js            the detail pane, its date and priority pickers
   habits.js            the habit month grid and the month journal
+  settings.js          the settings page, rendered from the core's descriptions
   workout.js           routines, exercises and the session grid
   quick-add.html/.js   the hotkey overlay, sharing capture.js
   widget.html/.js      the sticky note
@@ -171,7 +179,9 @@ src-tauri/
   src/main.rs          builder, plugins, the IPC surface
   src/commands.rs      commands — thin wrappers over the core
   src/workout_commands.rs  the workout book
+  src/settings_commands.rs  the switches, and the vault's controls
   src/shell.rs         tray, global hotkey, window management
+  src/watcher.rs       noticing that someone edited the vault
   src/state.rs         the shared store, and the tasks-changed event
   tauri.conf.json      windows, CSP, bundle
   capabilities/        Tauri v2 permissions
@@ -182,8 +192,50 @@ event, so completing something in the widget updates the main list instantly.
 
 ## Data
 
-`%APPDATA%\dev.mastertodo.desktop\tasks.db` — SQLite, local-first, no network.
-Deleting that file resets the app.
+Everything lives in a **vault** of plain text files, by default
+`%USERPROFILE%\Master Todo\`:
+
+```
+README.md          what the formats are
+settings.json      every switch on the Settings page
+tasks/inbox.md     one file per project, one checklist item per task
+habits/habits.md   the habits; 2026-09.md is a month of ticks and journal
+workouts/push.md   a routine, its exercises, and every session
+```
+
+These files are the real data. `%APPDATA%\dev.mastertodo.desktop\tasks.db` is
+an index built from them — delete it and the next launch rebuilds it. Edits
+made in any editor are picked up within about a second and a half, and the app
+mirrors its own changes straight back out, touching only the files whose
+contents actually differ.
+
+A task is an ordinary Markdown checklist item, so Obsidian renders a project
+file as a task list:
+
+```markdown
+- [ ] Gym due:2026-09-20 at:17:00 repeat:"every day" #fitness !p1 ^7f3a9c2e-…
+  - [ ] warm up
+  > Bring the new shoes.
+```
+
+Two rules make it safe to type into by hand. Metadata is read as a **suffix**,
+so a `#` or a `due:` in the middle of a title stays in the title. And a line
+with **no `^id` is treated as new**, so it goes through the same
+natural-language parser as the capture bar — writing
+
+```markdown
+- [ ] gym every day 5pm #health
+```
+
+into any file gives exactly the task that line would have made in the app.
+Lines that already carry an id are read literally, so editing a title never
+silently moves a date.
+
+Before an import replaces the database, the previous contents are written to
+`%APPDATA%\dev.mastertodo.desktop\backups\` as JSON, and the last five are
+kept — the vault can be somewhere only half-present, like a cloud folder
+mid-sync. Turning the vault off in Settings makes the database the only copy
+again.
 
 ## Not yet
 

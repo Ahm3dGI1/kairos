@@ -62,6 +62,10 @@ pub fn with_store<T>(
     let mut store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
     let out = f(&mut store).map_err(|e| e.to_string())?;
     drop(store);
+    // The files are the record, so a change is not really made until they say
+    // so. This is the one place every mutation passes through, which is why
+    // the mirror lives here rather than in each command.
+    crate::state::export(state);
     notify_changed(app);
     Ok(out)
 }

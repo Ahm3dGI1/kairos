@@ -10,8 +10,10 @@
 mod commands;
 mod daily_commands;
 mod reminders;
+mod settings_commands;
 mod shell;
 mod state;
+mod watcher;
 mod workout_commands;
 
 fn main() {
@@ -23,13 +25,19 @@ fn main() {
             state::init(&handle)?;
             shell::setup(&handle)?;
             reminders::start(&handle);
+            watcher::start(&handle);
             Ok(())
         })
         .on_window_event(|window, event| {
+            use tauri::Manager;
             // Closing a window parks the app in the tray instead of quitting —
             // a todo app that vanishes when you close its window is a todo app
             // that stops reminding you. Quit is on the tray menu.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Unless the user asked for the X to mean what it says.
+                if !settings_commands::current(window.app_handle()).close_to_tray {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -80,6 +88,13 @@ fn main() {
             workout_commands::save_set,
             workout_commands::save_session_note,
             workout_commands::delete_session,
+            settings_commands::settings,
+            settings_commands::settings_values,
+            settings_commands::set_setting,
+            settings_commands::vault_info,
+            settings_commands::reload_vault,
+            settings_commands::rewrite_vault,
+            settings_commands::open_vault,
             shell::hide_window,
             shell::toggle_widget_command,
             shell::show_main_window,
