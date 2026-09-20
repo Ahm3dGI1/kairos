@@ -6,7 +6,7 @@ members = ["core", "windows-app/src-tauri"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/ahmed/master-todo-app"
+repository = "https://github.com/ahmed/kairos"
 
 [workspace.dependencies]
 chrono = { version = "0.4", features = ["serde"] }

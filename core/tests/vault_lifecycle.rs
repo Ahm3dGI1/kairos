@@ -6,8 +6,8 @@
 //! is involved.
 
 use chrono::NaiveDate;
-use mtodo_core::vault::Vault;
-use mtodo_core::{Priority, Recurrence, Store, Task};
+use kairos_core::vault::Vault;
+use kairos_core::{Priority, Recurrence, Store, Task};
 
 fn today() -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 9, 20).unwrap()
@@ -18,7 +18,7 @@ struct Temp(std::path::PathBuf);
 
 impl Temp {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!("mtodo-lifecycle-{name}"));
+        let path = std::env::temp_dir().join(format!("kairos-lifecycle-{name}"));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
@@ -153,7 +153,7 @@ fn a_deleted_database_rebuilds_from_the_files() {
     original
         .save_set(
             session.session.id,
-            mtodo_core::workout::SetEntry { exercise: bench.id, index: 1, reps: 10, weight: 60.0 },
+            kairos_core::workout::SetEntry { exercise: bench.id, index: 1, reps: 10, weight: 60.0 },
         )
         .unwrap();
 

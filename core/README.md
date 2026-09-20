@@ -1,6 +1,6 @@
 # /core
 
-Shared business logic for every Master Todo App client — crate `mtodo-core`.
+Shared business logic for every Kairos client — crate `kairos-core`.
 Written once, depended on by all shells. No UI, no storage, no platform APIs.
 
 ## What exists now
@@ -36,7 +36,7 @@ Dates and times are naive local values. The core carries no timezone; the shell
 supplies one. Multi-device sync is what will force that question — see
 `docs/todo-app-spec.md` §6.
 
-Try it: `cargo run -p mtodo-core --example try_parse -- "gym every day 5pm"`
+Try it: `cargo run -p kairos-core --example try_parse -- "gym every day 5pm"`
 
 ## What it recognizes
 
@@ -69,7 +69,7 @@ instead of deleting a character.
 ## Commands
 
 ```sh
-cargo test -p mtodo-core                  # 79 tests: corpus, recurrence, agenda, store
+cargo test -p kairos-core                  # 79 tests: corpus, recurrence, agenda, store
 cargo clippy --workspace --all-targets
 cargo fmt
 ```

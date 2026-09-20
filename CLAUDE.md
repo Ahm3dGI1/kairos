@@ -1,10 +1,14 @@
-# Master Todo App
+# Kairos
+
+*καιρός* — the opportune moment, as against *chronos*, clock time. The name is the argument:
+the useful question is not what time it is but which thing is worth doing now, and an app that
+makes you fill in a form to record that has already lost.
 
 ## Why this project exists
 
 Every capable todo app either paywalls the features that make it capable, locks your data in
 someone else's cloud, or makes you fill out a form — date picker, time picker, recurrence
-dialog — to record a thought you could have typed in four words. Master Todo App is the free,
+dialog — to record a thought you could have typed in four words. Kairos is the free,
 open-source alternative: you type one line, "gym every day 5pm", and it becomes a fully
 structured recurring task. It is offline-first by design, self-hostable end to end, and has no
 paid tier. Phase 1 targets Windows 11; Linux, Android, and iPad follow later.
@@ -15,8 +19,8 @@ A todo app whose defining interaction is single-line natural-language capture. B
 covers priorities, tags, subtasks, projects/sections, recurring tasks with per-occurrence
 exceptions, a calendar view, quick filters, search, and keyboard-first navigation — plus
 Windows-native touches: a tray icon with hover preview, an always-visible desktop widget, and a
-global hotkey launcher. Sync is an optional layer over a local SQLite store, served by a server
-users host themselves.
+global hotkey launcher. Everything is stored as plain Markdown you can edit in any editor; sync
+is an optional layer on top, served by a server users host themselves.
 
 **The full spec lives in [`docs/todo-app-spec.md`](docs/todo-app-spec.md) — read it before making
 architectural decisions.** It carries the detail this file omits: the complete feature list, sync
@@ -28,7 +32,7 @@ Phase 1 is built; the later platforms are still open. Do not treat a candidate a
 
 | Area          | Choice                                          | Status         |
 | ------------- | ----------------------------------------------- | -------------- |
-| Core logic    | Rust — `mtodo-core`: parse, recur, store         | Built          |
+| Core logic    | Rust — `kairos-core`: parse, recur, store         | Built          |
 | Windows shell | Tauri v2 — no bundler, static frontend           | Built          |
 | Storage       | Markdown vault; SQLite as a rebuilt index        | Built          |
 | Sync server   | Postgres + realtime, or a custom minimal server  | Candidate      |
@@ -48,8 +52,8 @@ separate repos only if independent maintainers take over a platform. `/core` and
 are built; the rest are README stubs.
 
 ```
-/core          task model, NL parsing, recurrence, vault, store   (crate mtodo-core)
-/windows-app   Tauri shell: tray, widget, hotkey, calendar, UI    (crate mtodo-windows)
+/core          task model, NL parsing, recurrence, vault, store   (crate kairos-core)
+/windows-app   Tauri shell: tray, widget, hotkey, calendar, UI    (crate kairos-windows)
 /linux-app     terminal client                                       (future)
 /mobile-app    React Native or Flutter client                        (future)
 /sync-server   self-hostable sync backend
@@ -61,8 +65,8 @@ are built; the rest are README stubs.
 Both crates live in the root Cargo workspace.
 
 ```sh
-cargo run -p mtodo-windows      # launch the Windows app
-cargo test -p mtodo-core        # the fast loop: parser, recurrence, store
+cargo run -p kairos-windows      # launch the Windows app
+cargo test -p kairos-core        # the fast loop: parser, recurrence, store
 cargo clippy --workspace --all-targets
 cargo fmt
 cargo tauri build               # installers -> target/release/bundle

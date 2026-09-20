@@ -43,7 +43,7 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     WebviewWindowBuilder::new(app, "quick-add", WebviewUrl::App("quick-add.html".into()))
         .title("Quick add")
-        .inner_size(680.0, 124.0)
+        .inner_size(700.0, 132.0)
         .decorations(false)
         .transparent(false)
         .always_on_top(true)
@@ -57,8 +57,8 @@ fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
     // it drops behind, the way a note on the desk does. Pinning it is the
     // deliberate act that puts it above everything — see `toggle_sticky_pin`.
     WebviewWindowBuilder::new(app, "widget", WebviewUrl::App("widget.html".into()))
-        .title("Master Todo — sticky note")
-        .inner_size(300.0, 360.0)
+        .title("Kairos — sticky note")
+        .inner_size(320.0, 380.0)
         .decorations(false)
         .skip_taskbar(false)
         .resizable(true)
@@ -70,7 +70,7 @@ fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
 }
 
 fn build_tray(app: &AppHandle, sticky: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let open = MenuItem::with_id(app, "open", "Open Master Todo", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Kairos", true, None::<&str>)?;
     let quick = MenuItem::with_id(app, "quick", "Quick add\tCtrl+Shift+Space", true, None::<&str>)?;
     let widget = MenuItem::with_id(app, "widget", "Toggle sticky note", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;

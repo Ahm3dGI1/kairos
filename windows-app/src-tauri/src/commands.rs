@@ -1,12 +1,12 @@
 //! The commands the frontend calls.
 //!
-//! Every one of these is a thin shell over `mtodo-core`: parse a line, read a
+//! Every one of these is a thin shell over `kairos-core`: parse a line, read a
 //! view, write a change, emit "tasks-changed". No task semantics live here —
 //! that is the core's job, and duplicating any of it would put the Windows app
 //! and a future Linux client out of step.
 
 use chrono::{Datelike, Local, NaiveDate};
-use mtodo_core::{parse_excluding, recur, Field, Filter, Priority, Sort, Store, Task, TaskId};
+use kairos_core::{parse_excluding, recur, Field, Filter, Priority, Sort, Store, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
@@ -57,7 +57,7 @@ impl TaskView {
 pub fn with_store<T>(
     app: &AppHandle,
     state: &State<'_, AppState>,
-    f: impl FnOnce(&mut Store) -> Result<T, mtodo_core::StoreError>,
+    f: impl FnOnce(&mut Store) -> Result<T, kairos_core::StoreError>,
 ) -> CmdResult<T> {
     let mut store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
     let out = f(&mut store).map_err(|e| e.to_string())?;
@@ -73,7 +73,7 @@ pub fn with_store<T>(
 /// Reads from the store without announcing a change.
 pub fn read_store<T>(
     state: &State<'_, AppState>,
-    f: impl FnOnce(&Store) -> Result<T, mtodo_core::StoreError>,
+    f: impl FnOnce(&Store) -> Result<T, kairos_core::StoreError>,
 ) -> CmdResult<T> {
     let store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
     f(&store).map_err(|e| e.to_string())
@@ -246,7 +246,7 @@ pub struct Edit {
 pub fn update_task(app: AppHandle, state: State<'_, AppState>, edit: Edit) -> CmdResult<TaskView> {
     let today = today();
     let task = with_store(&app, &state, |store| {
-        let mut task = store.get(edit.id)?.ok_or(mtodo_core::StoreError::NotFound(edit.id))?;
+        let mut task = store.get(edit.id)?.ok_or(kairos_core::StoreError::NotFound(edit.id))?;
         if let Some(title) = edit.title {
             task.title = title;
         }
@@ -272,12 +272,12 @@ pub fn update_task(app: AppHandle, state: State<'_, AppState>, edit: Edit) -> Cm
             }
         }
         if let Some(mode) = edit.checklist {
-            task.checklist = mtodo_core::Checklist::parse(&mode);
+            task.checklist = kairos_core::Checklist::parse(&mode);
         }
         if let Some(phrase) = edit.recurrence {
             task.recurrence = phrase
                 .filter(|p| !p.trim().is_empty())
-                .and_then(|p| mtodo_core::recurrence_from_phrase(&p));
+                .and_then(|p| kairos_core::recurrence_from_phrase(&p));
             // A rule needs somewhere to start counting from.
             if task.recurrence.is_some() && task.due.is_none() {
                 task.due = Some(today);
@@ -298,8 +298,8 @@ pub fn add_subtask(
 ) -> CmdResult<TaskView> {
     let today = today();
     let task = with_store(&app, &state, |store| {
-        let mut task = store.get(id)?.ok_or(mtodo_core::StoreError::NotFound(id))?;
-        task.subtasks.push(mtodo_core::Subtask::new(title.trim()));
+        let mut task = store.get(id)?.ok_or(kairos_core::StoreError::NotFound(id))?;
+        task.subtasks.push(kairos_core::Subtask::new(title.trim()));
         store.save(&task)?;
         Ok(task)
     })?;
@@ -315,8 +315,8 @@ pub fn toggle_subtask(
 ) -> CmdResult<TaskView> {
     let today = today();
     let task = with_store(&app, &state, |store| {
-        let mut task = store.get(id)?.ok_or(mtodo_core::StoreError::NotFound(id))?;
-        mtodo_core::complete_item(&mut task, subtask_id, today);
+        let mut task = store.get(id)?.ok_or(kairos_core::StoreError::NotFound(id))?;
+        kairos_core::complete_item(&mut task, subtask_id, today);
         store.save(&task)?;
         Ok(task)
     })?;
@@ -333,8 +333,8 @@ pub fn skip_occurrence(
 ) -> CmdResult<TaskView> {
     let today = today();
     let task = with_store(&app, &state, |store| {
-        let mut task = store.get(id)?.ok_or(mtodo_core::StoreError::NotFound(id))?;
-        task.exceptions.push(mtodo_core::Exception::skip(date));
+        let mut task = store.get(id)?.ok_or(kairos_core::StoreError::NotFound(id))?;
+        task.exceptions.push(kairos_core::Exception::skip(date));
         // Move the anchor past the skipped date so the task leaves today's list.
         if task.due == Some(date) {
             task.due = recur::next_occurrence(&task, date).or(task.due);
@@ -356,8 +356,8 @@ pub fn reschedule_occurrence(
 ) -> CmdResult<TaskView> {
     let today = today();
     let task = with_store(&app, &state, |store| {
-        let mut task = store.get(id)?.ok_or(mtodo_core::StoreError::NotFound(id))?;
-        task.exceptions.push(mtodo_core::Exception::move_to(date, to));
+        let mut task = store.get(id)?.ok_or(kairos_core::StoreError::NotFound(id))?;
+        task.exceptions.push(kairos_core::Exception::move_to(date, to));
         store.save(&task)?;
         Ok(task)
     })?;

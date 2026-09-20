@@ -1,8 +1,8 @@
 //! Redo, the one-per-occurrence checklist, and the workout book.
 
 use chrono::NaiveDate;
-use mtodo_core::workout::{self, SetEntry};
-use mtodo_core::{complete_item, Checklist, Recurrence, Store, Subtask, Task};
+use kairos_core::workout::{self, SetEntry};
+use kairos_core::{complete_item, Checklist, Recurrence, Store, Subtask, Task};
 
 fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
@@ -90,7 +90,7 @@ fn redo_restores_a_deletion() {
 fn learning() -> Task {
     let mut task = Task::new("Learning", today());
     task.due = Some(today());
-    task.recurrence = Some(Recurrence::Weekly { days: mtodo_core::WeekdaySet::EMPTY });
+    task.recurrence = Some(Recurrence::Weekly { days: kairos_core::WeekdaySet::EMPTY });
     task.checklist = Checklist::OnePerOccurrence;
     task.subtasks = vec![
         Subtask::new("learn to cook"),

@@ -6,7 +6,7 @@ The Windows 11 client — phase 1 of the project. A Tauri v2 shell over
 ## Running it
 
 ```sh
-cargo run -p mtodo-windows
+cargo run -p kairos-windows
 ```
 
 That is the whole dev loop. There is **no bundler and no npm**: the frontend is
@@ -30,11 +30,11 @@ needed. It writes three things under `target/release/`:
 
 | Artifact | Path | Use |
 | --- | --- | --- |
-| Setup | `bundle/nsis/Master Todo_<version>_x64-setup.exe` | what a person downloads and runs |
-| MSI | `bundle/msi/Master Todo_<version>_x64_en-US.msi` | silent/managed install (`msiexec /i … /qn`) |
-| Bare binary | `mtodo-windows.exe` | portable — runs with no install |
+| Setup | `bundle/nsis/Kairos_<version>_x64-setup.exe` | what a person downloads and runs |
+| MSI | `bundle/msi/Kairos_<version>_x64_en-US.msi` | silent/managed install (`msiexec /i … /qn`) |
+| Bare binary | `kairos-windows.exe` | portable — runs with no install |
 
-Both installers register the app so reminders are attributed to Master Todo
+Both installers register the app so reminders are attributed to Kairos
 rather than to whatever launched it, and both add the tray icon and Start menu
 entry. The bare `.exe` works too, but Windows will not know its identity.
 
@@ -63,9 +63,9 @@ There is no server: the app is entirely local, so "hosting" means hosting the
 
 ```sh
 gh release create v0.1.0 \
-  "target/release/bundle/nsis/Master Todo_0.1.0_x64-setup.exe" \
-  "target/release/bundle/msi/Master Todo_0.1.0_x64_en-US.msi" \
-  --title "Master Todo 0.1.0" --notes "First release."
+  "target/release/bundle/nsis/Kairos_0.1.0_x64-setup.exe" \
+  "target/release/bundle/msi/Kairos_0.1.0_x64_en-US.msi" \
+  --title "Kairos 0.1.0" --notes "First release."
 ```
 
 Releases are free for public repos, need no infrastructure, and give a stable
@@ -137,7 +137,7 @@ every device is independent.
 
   Run from `cargo run`, Windows attributes the toast to whatever launched the
   binary, because an unpackaged app has no registered identity of its own. An
-  installed build (`cargo tauri build`) shows up as Master Todo.
+  installed build (`cargo tauri build`) shows up as Kairos.
 
 ## Keyboard
 
@@ -159,6 +159,16 @@ The app is keyboard-first; the mouse is optional everywhere.
 | `1`–`5` | Tasks, Calendar, Habits, Workout, Settings |
 | `Esc` | close the pane, clear the search, dismiss the overlay |
 | `Ctrl+Shift+Space` | quick-add overlay, from anywhere in Windows |
+
+## The icon
+
+[`src-tauri/icons/icon.svg`](src-tauri/icons/icon.svg) is the source; the PNGs and the `.ico`
+beside it are rendered from that geometry. It is a sundial cut down to a dial, one
+hand, and the moment it points at — not a two-handed clock, because a clock
+tells you the time and this app is about the one moment worth acting on. The
+dial is left open where the hand leaves it. The plate sits just off black so
+the icon still separates from a dark taskbar, and the amber is the interface's
+single accent doing the same job it does there.
 
 ## Layout
 
@@ -193,7 +203,7 @@ event, so completing something in the widget updates the main list instantly.
 ## Data
 
 Everything lives in a **vault** of plain text files, by default
-`%USERPROFILE%\Master Todo\`:
+`%USERPROFILE%\Kairos\`:
 
 ```
 README.md          what the formats are
@@ -203,7 +213,7 @@ habits/habits.md   the habits; 2026-09.md is a month of ticks and journal
 workouts/push.md   a routine, its exercises, and every session
 ```
 
-These files are the real data. `%APPDATA%\dev.mastertodo.desktop\tasks.db` is
+These files are the real data. `%APPDATA%\dev.kairos.desktop\tasks.db` is
 an index built from them — delete it and the next launch rebuilds it. Edits
 made in any editor are picked up within about a second and a half, and the app
 mirrors its own changes straight back out, touching only the files whose
@@ -232,7 +242,7 @@ Lines that already carry an id are read literally, so editing a title never
 silently moves a date.
 
 Before an import replaces the database, the previous contents are written to
-`%APPDATA%\dev.mastertodo.desktop\backups\` as JSON, and the last five are
+`%APPDATA%\dev.kairos.desktop\backups\` as JSON, and the last five are
 kept — the vault can be somewhere only half-present, like a cloud folder
 mid-sync. Turning the vault off in Settings makes the database the only copy
 again.

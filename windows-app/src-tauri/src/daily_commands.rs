@@ -2,10 +2,10 @@
 //! — a grid of habits by day, with the month's journal beside it.
 //!
 //! Like the rest of the shell, these are wrappers. The bucketing rules live in
-//! `mtodo_core::agenda` and the habit rules in `mtodo_core::daily`.
+//! `kairos_core::agenda` and the habit rules in `kairos_core::daily`.
 
 use chrono::{Datelike, Local, NaiveDate};
-use mtodo_core::{agenda, daily, DayLog, HabitId, JournalEntry, MonthJournal, Narrow, Task};
+use kairos_core::{agenda, daily, DayLog, HabitId, JournalEntry, MonthJournal, Narrow, Task};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 

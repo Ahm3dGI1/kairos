@@ -281,7 +281,7 @@ fn markdown_in(dir: &Path) -> impl Iterator<Item = (PathBuf, String)> {
     })
 }
 
-const README: &str = r#"# Your Master Todo vault
+const README: &str = r#"# Your Kairos vault
 
 These files are the real data. The app's database is an index built from them:
 delete it and the next launch rebuilds it from here. Edit anything below in any
@@ -349,7 +349,7 @@ mod tests {
 
     impl TempVault {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("mtodo-vault-{name}"));
+            let path = std::env::temp_dir().join(format!("kairos-vault-{name}"));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).unwrap();
             Self(path)

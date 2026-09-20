@@ -1,4 +1,4 @@
-// Master Todo — main window, Direction B.
+// Kairos — main window, Direction B.
 //
 // A rail for the three pages, a mono status line that says where you are and
 // what you can press, the page itself, and a capture bar pinned to the bottom

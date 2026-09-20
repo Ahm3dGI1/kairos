@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn a_broken_file_still_starts_the_app() {
-        let dir = std::env::temp_dir().join("mtodo-settings-test");
+        let dir = std::env::temp_dir().join("kairos-settings-test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("broken.json");
         std::fs::write(&path, "{ not json at all").unwrap();
@@ -317,7 +317,7 @@ mod tests {
 
     #[test]
     fn a_saved_file_reads_back_identical() {
-        let dir = std::env::temp_dir().join("mtodo-settings-test");
+        let dir = std::env::temp_dir().join("kairos-settings-test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("roundtrip.json");
         let mut settings = Settings::default();

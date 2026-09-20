@@ -1,6 +1,6 @@
 [package]
-name = "mtodo-core"
-description = "Shared task model and natural-language parsing for Master Todo App"
+name = "kairos-core"
+description = "Shared task model and natural-language parsing for Kairos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

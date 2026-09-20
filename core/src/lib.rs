@@ -1,4 +1,4 @@
-//! Shared business logic for Master Todo App.
+//! Shared business logic for Kairos.
 //!
 //! Everything a client needs to know about what a task *is* lives here: the
 //! model, the natural-language parsing that turns a single typed line into one,
@@ -8,7 +8,7 @@
 //!
 //! ```
 //! use chrono::{NaiveDate, NaiveTime};
-//! use mtodo_core::{parse_at, Recurrence};
+//! use kairos_core::{parse_at, Recurrence};
 //!
 //! let now = NaiveDate::from_ymd_opt(2026, 9, 13).unwrap().and_hms_opt(9, 0, 0).unwrap();
 //! let result = parse_at("gym every day 5pm #health", now);

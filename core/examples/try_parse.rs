@@ -1,9 +1,9 @@
-//! Try the parser on a line: `cargo run -p mtodo-core --example try_parse -- "gym every day 5pm"`
+//! Try the parser on a line: `cargo run -p kairos-core --example try_parse -- "gym every day 5pm"`
 //!
 //! With no argument it runs a short demo set. Parsing resolves against the real
 //! local time, so relative phrases mean what they would mean right now.
 
-use mtodo_core::parse;
+use kairos_core::parse;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

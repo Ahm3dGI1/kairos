@@ -1,6 +1,11 @@
-# Master Todo App — Project Specification
+# Kairos — Project Specification
 
 ## 1. Vision
+
+**The name.** *Kairos* (καιρός) is the Greek for the opportune moment — the right time to act —
+as distinct from *chronos*, time as it elapses on a clock. Every other todo app is built around
+chronos: fields for dates, fields for times, a calendar to file things into. This one is built
+around the other question, which is why the defining interaction is a sentence rather than a form.
 
 A free, open-source, simplified-but-capable todo app. Core interaction: type or say one line ("gym every day 5pm") and it becomes a fully-structured task — no manual date/time/recurrence pickers required. Cross-platform, offline-first, no paywalled features.
 

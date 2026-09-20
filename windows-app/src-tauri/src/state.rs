@@ -13,8 +13,8 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use mtodo_core::vault::Vault;
-use mtodo_core::{Settings, Store};
+use kairos_core::vault::Vault;
+use kairos_core::{Settings, Store};
 use tauri::{AppHandle, Emitter, Manager};
 
 pub struct AppState {
@@ -56,11 +56,24 @@ pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
 
-    let default_vault = app
-        .path()
-        .home_dir()
-        .map(|home| home.join("Master Todo"))
-        .unwrap_or_else(|_| data_dir.join("vault"));
+    let home = app.path().home_dir().ok();
+    let default_vault = match &home {
+        Some(home) => {
+            let named = home.join("Kairos");
+            // The app was called Master Todo before, and the rename must not
+            // orphan a vault someone is already keeping notes in. The old
+            // folder is adopted as-is rather than moved: it may be a git
+            // checkout or a synced folder, and moving it would break more than
+            // it tidied.
+            let previous = home.join("Master Todo");
+            if !named.exists() && previous.exists() {
+                previous
+            } else {
+                named
+            }
+        }
+        None => data_dir.join("vault"),
+    };
 
     // The pointer wins if it is there; otherwise the default, which the first
     // run writes down.

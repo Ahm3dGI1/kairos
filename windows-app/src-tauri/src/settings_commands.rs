@@ -3,7 +3,7 @@
 //! The switches themselves are defined in the core so that every shell offers
 //! the same ones; this file only moves them between the frontend and the file.
 
-use mtodo_core::{Setting, Settings};
+use kairos_core::{Setting, Settings};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 

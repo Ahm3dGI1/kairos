@@ -4,7 +4,7 @@ tags: []
 
 ---
 
-# Master Todo — design brief
+# Kairos — design brief
 
 Everything the app currently is, in enough detail to redesign it. Written for a
 designer who has not seen the code.
@@ -304,7 +304,7 @@ Frameless 320×420 panel listing today's tasks.
 
 - **Tray tooltip** previews the day: a headline (`3 due today, 1 overdue`) then
   up to three task titles and `+N more`
-- **Right-click menu**: Open Master Todo · Quick add (Ctrl+Shift+Space) ·
+- **Right-click menu**: Open Kairos · Quick add (Ctrl+Shift+Space) ·
   Toggle sticky note · — · Quit
 - **Left click** opens the main window
 - **Reminders** fire a standard Windows notification at a task's time —

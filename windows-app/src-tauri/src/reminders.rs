@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use chrono::{Local, NaiveDate, NaiveTime, Timelike};
-use mtodo_core::{recur, Filter, Sort, TaskId};
+use kairos_core::{recur, Filter, Sort, TaskId};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
 
@@ -110,8 +110,8 @@ fn format_hour(time: NaiveTime) -> String {
 /// waiting without opening anything.
 pub fn update_tooltip(app: &AppHandle) {
     let Some(tray) = app.tray_by_id("tray") else { return };
-    let text = summary(app).unwrap_or_else(|| "Master Todo".to_string());
-    let _ = tray.set_tooltip(Some(format!("Master Todo — {text}")));
+    let text = summary(app).unwrap_or_else(|| "Kairos".to_string());
+    let _ = tray.set_tooltip(Some(format!("Kairos — {text}")));
 }
 
 fn summary(app: &AppHandle) -> Option<String> {

@@ -1962,6 +1962,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "kairos-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "kairos-windows"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "kairos-core",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-notification",
+ "uuid",
+]
+
+[[package]]
 name = "keyboard-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2143,33 +2170,6 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "mtodo-core"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "rusqlite",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "mtodo-windows"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "mtodo-core",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-notification",
- "uuid",
 ]
 
 [[package]]

@@ -4,7 +4,7 @@
 //! weekday has to move forward off the anchor to find its first occurrence.
 
 use chrono::{NaiveDate, Weekday};
-use mtodo_core::{
+use kairos_core::{
     complete_occurrence, next_occurrence, occurrences, Exception, Recurrence, Task, WeekdaySet,
 };
 

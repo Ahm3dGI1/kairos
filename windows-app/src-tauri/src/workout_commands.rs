@@ -5,7 +5,7 @@
 //! Nothing here interprets the numbers — that is the point of recording them.
 
 use chrono::{Datelike, NaiveDate};
-use mtodo_core::workout::{self, ExerciseId, RoutineId, SessionId, SetEntry};
+use kairos_core::workout::{self, ExerciseId, RoutineId, SessionId, SetEntry};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 

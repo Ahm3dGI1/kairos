@@ -3,9 +3,9 @@
 use std::collections::HashSet;
 
 use chrono::NaiveDate;
-use mtodo_core::agenda::{self, Bucket};
-use mtodo_core::daily::{self, DayLog};
-use mtodo_core::{JournalEntry, MonthJournal, Recurrence, Store, Task};
+use kairos_core::agenda::{self, Bucket};
+use kairos_core::daily::{self, DayLog};
+use kairos_core::{JournalEntry, MonthJournal, Recurrence, Store, Task};
 
 fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
@@ -50,7 +50,7 @@ fn a_completed_task_is_completed_whatever_its_date() {
 fn a_recurring_task_is_placed_by_its_next_occurrence() {
     let mut weekly = task("standup", Some(today()));
     weekly.recurrence =
-        Some(Recurrence::Weekly { days: mtodo_core::WeekdaySet::from_day(chrono::Weekday::Mon) });
+        Some(Recurrence::Weekly { days: kairos_core::WeekdaySet::from_day(chrono::Weekday::Mon) });
     // Today is a Friday; the next Monday is three days out.
     assert_eq!(Bucket::of(&weekly, today()), Bucket::ThisWeek);
 }
@@ -73,7 +73,7 @@ fn grouping_drops_empty_sections_and_orders_within_them() {
         task("today first", Some(today())),
     ];
     let mut first = tasks[3].clone();
-    first.priority = mtodo_core::Priority::High;
+    first.priority = kairos_core::Priority::High;
 
     let groups = agenda::group(
         vec![tasks[0].clone(), tasks[1].clone(), tasks[2].clone(), first],

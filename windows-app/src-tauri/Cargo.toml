@@ -1,6 +1,6 @@
 [package]
-name = "mtodo-windows"
-description = "Master Todo App — Windows 11 shell"
+name = "kairos-windows"
+description = "Kairos — Windows 11 shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ repository.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-mtodo-core = { path = "../../core" }
+kairos-core = { path = "../../core" }
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

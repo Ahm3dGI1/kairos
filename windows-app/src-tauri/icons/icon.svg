@@ -1,0 +1,32 @@
+<!--
+  Kairos — καιρός, the opportune moment, as against chronos, clock time.
+
+  A sundial reduced to what matters: the dial, one hand, and the moment it
+  points at. Deliberately not a two-handed clock — a clock tells you the time,
+  and this app is about the one moment worth acting on. The dial is left open
+  where the hand leaves it, so the moment breaks through the ring instead of
+  sitting on top of it.
+
+  The amber is the interface's single accent, doing the same job here that it
+  does there: now.
+
+  This file is the source. The PNGs and the .ico beside it are rendered from
+  this geometry at 32, 128, 256 and 512, plus the seven sizes Windows picks
+  between inside the .ico.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The plate is lifted off pure black so the icon still separates from a
+       dark Windows taskbar. -->
+  <rect x="3" y="3" width="506" height="506" rx="115" ry="115"
+        fill="#16171c" stroke="#3a3b42" stroke-width="6" />
+
+  <!-- The dial: 312° of a circle, open toward one o'clock. -->
+  <path d="M 396.94 160.94 A 170 170 0 1 1 279.66 87.65"
+        fill="none" stroke="#74756a" stroke-width="28" />
+
+  <!-- One hand, and the moment at the end of it. -->
+  <line x1="256" y1="256" x2="341" y2="108.8"
+        stroke="#e0b25e" stroke-width="26" stroke-linecap="round" />
+  <circle cx="341" cy="108.8" r="38" fill="#f2cd83" />
+  <circle cx="256" cy="256" r="18" fill="#e0b25e" />
+</svg>

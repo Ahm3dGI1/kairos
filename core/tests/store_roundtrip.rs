@@ -1,8 +1,8 @@
 //! The local store: persistence, the saved views, and undo.
 
 use chrono::NaiveDate;
-use mtodo_core::store::UndoKind;
-use mtodo_core::{
+use kairos_core::store::UndoKind;
+use kairos_core::{
     parse_at, Exception, Filter, Priority, Recurrence, Sort, Store, Subtask, Task, WeekdaySet,
 };
 
@@ -74,7 +74,7 @@ fn a_parsed_line_can_be_stored_as_it_came_out() {
 
 #[test]
 fn the_database_persists_across_reopening() {
-    let dir = std::env::temp_dir().join(format!("mtodo-test-{}", uuid_like()));
+    let dir = std::env::temp_dir().join(format!("kairos-test-{}", uuid_like()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("tasks.db");
 

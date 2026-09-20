@@ -335,8 +335,8 @@ export function renderDetail(root, task, { todayDate, actions }) {
       el('span', {}, [
         (() => {
           const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          svg.setAttribute('width', '9');
-          svg.setAttribute('height', '9');
+          svg.setAttribute('width', '10');
+          svg.setAttribute('height', '10');
           svg.setAttribute('viewBox', '0 0 24 24');
           svg.setAttribute('fill', 'none');
           svg.setAttribute('stroke', 'currentColor');

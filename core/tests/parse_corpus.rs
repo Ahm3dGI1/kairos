@@ -5,7 +5,7 @@
 //! difference between "sunday" (today) and "next sunday" (a week out) visible.
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Weekday};
-use mtodo_core::{parse_at, Field, Priority, Recurrence, WeekdaySet};
+use kairos_core::{parse_at, Field, Priority, Recurrence, WeekdaySet};
 
 fn now() -> NaiveDateTime {
     NaiveDate::from_ymd_opt(2026, 9, 13).unwrap().and_hms_opt(9, 0, 0).unwrap()
@@ -377,7 +377,7 @@ fn a_parse_can_be_reverted_to_plain_text() {
     assert_eq!(&input[monday.clone()], "monday");
 
     // Revert just the date; the recurrence it sat beside is untouched.
-    let reverted = mtodo_core::parse_excluding(input, now(), &[monday]);
+    let reverted = kairos_core::parse_excluding(input, now(), &[monday]);
     assert_eq!(reverted.task.title, "write about my monday");
     assert_eq!(reverted.task.recurrence, Some(Recurrence::Weekly { days: WeekdaySet::EMPTY }));
     assert!(reverted.matched(Field::Date).is_none());
@@ -389,7 +389,7 @@ fn reverting_every_span_leaves_the_line_exactly_as_typed() {
     let parsed = parse_at(input, now());
     let spans: Vec<_> = parsed.matches.iter().map(|m| m.span.clone()).collect();
 
-    let reverted = mtodo_core::parse_excluding(input, now(), &spans);
+    let reverted = kairos_core::parse_excluding(input, now(), &spans);
     assert_eq!(reverted.task.title, input);
     assert_eq!(reverted.task.recurrence, None);
     assert_eq!(reverted.task.time, None);

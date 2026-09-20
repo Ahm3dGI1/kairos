@@ -1,6 +1,6 @@
-//! Master Todo — the Windows 11 shell.
+//! Kairos — the Windows 11 shell.
 //!
-//! A Tauri app over `mtodo-core`. This crate owns windows, the tray, the global
+//! A Tauri app over `kairos-core`. This crate owns windows, the tray, the global
 //! hotkey and the IPC surface; every decision about what a task *means* belongs
 //! to the core, so that a Linux or mobile client behaves identically.
 
@@ -102,5 +102,5 @@ fn main() {
             shell::sticky_pinned,
         ])
         .run(tauri::generate_context!())
-        .expect("failed to start Master Todo");
+        .expect("failed to start Kairos");
 }
