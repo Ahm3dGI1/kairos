@@ -18,3 +18,4 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
 uuid = { workspace = true }
+tauri-plugin-autostart = "2.5.1"

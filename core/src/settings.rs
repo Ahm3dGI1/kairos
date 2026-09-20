@@ -46,6 +46,8 @@ pub struct Settings {
     pub tray_icon: bool,
     /// Fire a Windows notification when a task's time arrives.
     pub reminders: bool,
+    /// Launch with Windows, into the tray.
+    pub start_on_login: bool,
 
     // Behaviour
     /// Ask before deleting a task. Off by default: undo is the safety net, and
@@ -80,6 +82,7 @@ impl Default for Settings {
             close_to_tray: true,
             tray_icon: true,
             reminders: true,
+            start_on_login: false,
             confirm_delete: false,
             show_completed: false,
             week_starts_monday: true,
@@ -159,6 +162,8 @@ const SCHEMA: &[(&str, &str, &str, &str, bool)] = &[
      "Closing the window parks the app instead of quitting it. Off means the X quits.", false),
     ("reminders", "Windows", "Reminders",
      "A notification when a task's time arrives.", false),
+    ("start_on_login", "Windows", "Start with Windows",
+     "Launch at sign-in and wait in the tray, so the hotkey and reminders work without opening anything first.", false),
 
     ("show_completed", "Behaviour", "Show completed",
      "Keep finished work visible in the list instead of behind the toggle.", false),

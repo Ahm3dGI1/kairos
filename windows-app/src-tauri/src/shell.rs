@@ -12,7 +12,12 @@ use tauri::{
     tray::{TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+/// Passed to the copy of the app that Windows starts at sign-in, so it can
+/// tell that nobody asked for a window.
+pub const AUTOSTART_FLAG: &str = "--autostart";
 
 /// The Spotlight-style launcher key. Ctrl+Shift+Space is unclaimed by Windows
 /// itself and by the common editors, which is the whole requirement.
@@ -32,7 +37,40 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     if settings.global_hotkey {
         register_hotkey(app)?;
     }
+    sync_autostart(app, settings.start_on_login);
+
+    // Started by Windows rather than by the user, so there is nothing to show:
+    // wait in the tray, which is where the hotkey and reminders live anyway.
+    // Guarded by the tray, because starting hidden with no tray icon would be
+    // starting with no way back.
+    if launched_at_login() && settings.tray_icon {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+    }
     Ok(())
+}
+
+/// Whether Windows started this copy at sign-in.
+pub fn launched_at_login() -> bool {
+    std::env::args().any(|arg| arg == AUTOSTART_FLAG)
+}
+
+/// Brings the run-at-login entry into agreement with the setting.
+///
+/// `settings.json` is the record, the same rule the vault follows. So an entry
+/// removed by hand or by some other tool is put back, and one left behind
+/// after the switch was turned off is cleared — rather than the app trusting
+/// whatever the registry happens to say.
+pub fn sync_autostart(app: &AppHandle, wanted: bool) {
+    let launcher = app.autolaunch();
+    if launcher.is_enabled().is_ok_and(|current| current == wanted) {
+        return;
+    }
+    let result = if wanted { launcher.enable() } else { launcher.disable() };
+    if let Err(error) = result {
+        eprintln!("could not change the run-at-login entry: {error}");
+    }
 }
 
 /// Creates the quick-add overlay and the desktop widget up front, both hidden.

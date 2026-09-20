@@ -81,7 +81,15 @@ pub fn set_setting(
     }
     settings.save(state.paths.settings_file()).map_err(|e| e.to_string())?;
     let described = settings.describe();
+    let start_on_login = settings.start_on_login;
     drop(settings);
+
+    // Most switches are read back at the next render and need nothing here.
+    // This one reaches outside the app, into the registry, so saving it is not
+    // the same as applying it.
+    if key == "start_on_login" {
+        crate::shell::sync_autostart(&app, start_on_login);
+    }
 
     let _ = app.emit(SETTINGS_CHANGED, ());
     let _ = app.emit(DATA_CHANGED, ());

@@ -38,6 +38,15 @@ Both installers register the app so reminders are attributed to Kairos
 rather than to whatever launched it, and both add the tray icon and Start menu
 entry. The bare `.exe` works too, but Windows will not know its identity.
 
+The whole app is that one file. Rust links statically, the frontend is
+embedded into the binary at compile time, and the web view is the WebView2
+runtime Windows 11 already ships — so there is no runtime to lay down beside
+it. An Electron app has to bring its own copy of Chromium and Node, which is
+why one installs as a folder of a hundred-odd files and this installs as an
+executable. Turn **Start with Windows** on and enable it from the *installed*
+build: the startup entry records the path of whichever binary registered it,
+so doing it from `cargo run` would point Windows at `target/debug`.
+
 The version lives in **two** places that must agree: `version` in the workspace
 `Cargo.toml` and `version` in `src-tauri/tauri.conf.json`. Bump both, or the
 installer's version and the binary's disagree.
@@ -120,6 +129,14 @@ every device is independent.
   copies the last one's numbers so you adjust rather than retype.
 - **Recurring exceptions** — skip or push a single occurrence from the detail
   pane without breaking the series.
+- **Start with Windows** — off by default. On, it adds a per-user entry to
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` pointing at the
+  installed binary with `--autostart`, and that copy starts straight into the
+  tray rather than opening a window: the point of starting at sign-in is that
+  the hotkey and reminders work before you have opened anything. It will not
+  start hidden if the tray icon is switched off, because that would be
+  starting with no way back. `settings.json` is the record — an entry deleted
+  by hand is put back at the next launch, and one left behind is cleared.
 - **Settings** — a page of switches for every feature above: which pages appear
   in the rail, whether capture tints what it parsed, the tray icon, the global
   hotkey, reminders, the theme, which day a week starts on, and the vault. The
