@@ -1866,3 +1866,75 @@ select {
   font-size: 11px;
   color: var(--text-dim);
 }
+
+/* A button that is only a word: the Esc affordance in the detail header, and
+   anything else that should read as text but behave as a control. Without
+   this it falls back to the browser's grey chrome, which is the one thing the
+   rest of the interface never uses. */
+.plain {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-ghost);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.plain:hover {
+  color: var(--text-2);
+  border-color: var(--line);
+}
+
+.plain:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- the repeat popover ---- */
+
+.pop .repeat-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.pop-label {
+  margin: 10px 0 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+}
+
+/* Seven keys, one per weekday. Sized so three clicks is a rule. */
+.pop .day-picker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.pop .day-key {
+  padding: 5px 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--cell-off);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.pop .day-key:hover {
+  color: var(--text);
+  border-color: var(--edge);
+}
+
+.pop .day-key.on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}

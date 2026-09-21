@@ -225,18 +225,39 @@ pub fn delete_task(app: AppHandle, state: State<'_, AppState>, id: TaskId) -> Cm
     with_store(&app, &state, |s| s.delete(id))
 }
 
+/// Lets a field tell "was not sent" apart from "was sent as null".
+///
+/// Serde folds both onto `None` for a plain `Option<Option<T>>`, which would
+/// make "leave the due date alone" and "clear the due date" the same request —
+/// so every edit would have to send every field, and clearing one would be
+/// impossible. Absent stays `None`; an explicit `null` becomes `Some(None)`.
+fn sent<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
 /// Applies an edit made in the detail pane.
-#[derive(Deserialize)]
+///
+/// Every field is optional and means "leave this alone" when absent. The four
+/// that can be cleared take `null` to mean exactly that.
+#[derive(Debug, Deserialize)]
 pub struct Edit {
     id: TaskId,
     title: Option<String>,
     notes: Option<String>,
+    #[serde(default, deserialize_with = "sent")]
     due: Option<Option<NaiveDate>>,
+    #[serde(default, deserialize_with = "sent")]
     time: Option<Option<String>>,
     priority: Option<String>,
+    #[serde(default, deserialize_with = "sent")]
     project: Option<Option<String>>,
     tags: Option<Vec<String>>,
-    /// A recurrence phrase ("every monday"), or null to clear the rule.
+    /// A recurrence phrase ("every monday and wednesday"), or null to clear it.
+    #[serde(default, deserialize_with = "sent")]
     recurrence: Option<Option<String>>,
     /// "all" or "one-per-occurrence".
     checklist: Option<String>,
@@ -499,4 +520,44 @@ pub fn view_counts(
 pub fn current_month() -> (i32, u32) {
     let now = today();
     (now.year(), now.month())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ID: &str = "7f3a9c2e-4b1d-4f2a-9c3e-1a2b3c4d5e6f";
+
+    fn edit(json: &str) -> Edit {
+        serde_json::from_str(&format!(r#"{{"id":"{ID}",{json}}}"#)).expect("edit should parse")
+    }
+
+    /// The three states every clearable field has to carry. Collapsing the
+    /// first two is what made "set a repeat" and "clear the repeat" the same
+    /// request, and it fails silently — the field just never changes.
+    #[test]
+    fn absent_clear_and_set_are_three_different_things() {
+        let untouched = edit(r#""title":"x""#);
+        assert!(untouched.due.is_none(), "absent means leave it alone");
+        assert!(untouched.recurrence.is_none());
+
+        let cleared = edit(r#""due":null,"recurrence":null,"time":null"#);
+        assert_eq!(cleared.due, Some(None), "null means clear it");
+        assert_eq!(cleared.recurrence, Some(None));
+        assert_eq!(cleared.time, Some(None));
+
+        let set = edit(r#""due":"2026-09-21","recurrence":"every monday","time":"17:00""#);
+        assert_eq!(set.due, Some(NaiveDate::from_ymd_opt(2026, 9, 21)));
+        assert_eq!(set.recurrence, Some(Some("every monday".into())));
+        assert_eq!(set.time, Some(Some("17:00".into())));
+    }
+
+    /// What the detail pane used to send. Keeping it rejected means the bug
+    /// cannot come back quietly: it fails at the boundary, loudly.
+    #[test]
+    fn a_wrapped_value_is_rejected_rather_than_ignored() {
+        let json = format!(r#"{{"id":"{ID}","recurrence":["every monday"]}}"#);
+        let error = serde_json::from_str::<Edit>(&json).unwrap_err().to_string();
+        assert!(error.contains("invalid type"), "got: {error}");
+    }
 }

@@ -72,7 +72,7 @@ fn match_at(tokens: &[Token], i: usize) -> Option<(Recurrence, usize)> {
             "month" | "months" => Recurrence::EveryNMonths(n),
             "year" | "years" if n == 1 => Recurrence::Yearly,
             _ => {
-                let mut days = WeekdaySet::from_day(words::weekday(unit)?);
+                let mut days = words::weekday_run(unit)?;
                 let end = extend_weekdays(tokens, j + 2, &mut days);
                 return Some(finish(tokens, Recurrence::EveryNWeeks { n, days }, end));
             }
@@ -88,7 +88,7 @@ fn match_at(tokens: &[Token], i: usize) -> Option<(Recurrence, usize)> {
         "weekday" | "weekdays" => Recurrence::WEEKDAYS,
         "weekend" | "weekends" => Recurrence::WEEKENDS,
         _ => {
-            let mut days = WeekdaySet::from_day(words::weekday(next)?);
+            let mut days = words::weekday_run(next)?;
             let end = extend_weekdays(tokens, j + 1, &mut days);
             return Some(finish(tokens, Recurrence::Weekly { days }, end));
         }
@@ -105,9 +105,9 @@ fn extend_weekdays(tokens: &[Token], mut j: usize, days: &mut WeekdaySet) -> usi
         if word_at(tokens, k).is_some_and(|w| matches!(w, "and" | "&" | "plus")) {
             k += 1;
         }
-        match word_at(tokens, k).and_then(words::weekday) {
-            Some(day) => {
-                days.insert(day);
+        match word_at(tokens, k).and_then(words::weekday_run) {
+            Some(more) => {
+                *days = days.union(more);
                 j = k + 1;
             }
             None => return j,
@@ -136,12 +136,12 @@ fn anchor(tokens: &[Token], mut j: usize, rule: Recurrence) -> Option<(Recurrenc
             Recurrence::Monthly { day: Some(words::ordinal_day(word)?) }
         }
         Recurrence::Weekly { days } if days.is_empty() => {
-            let mut days = WeekdaySet::from_day(words::weekday(word)?);
+            let mut days = words::weekday_run(word)?;
             let end = extend_weekdays(tokens, j + 1, &mut days);
             return Some((Recurrence::Weekly { days }, end));
         }
         Recurrence::EveryNWeeks { n, days } if days.is_empty() => {
-            let mut days = WeekdaySet::from_day(words::weekday(word)?);
+            let mut days = words::weekday_run(word)?;
             let end = extend_weekdays(tokens, j + 1, &mut days);
             return Some((Recurrence::EveryNWeeks { n, days }, end));
         }

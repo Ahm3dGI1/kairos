@@ -212,6 +212,11 @@ impl WeekdaySet {
         *self = self.with(day);
     }
 
+    /// Every day in either set.
+    pub fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
     pub fn contains(self, day: Weekday) -> bool {
         self.0 & (1 << day.num_days_from_monday()) != 0
     }

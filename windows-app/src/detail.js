@@ -24,6 +24,31 @@ const REPEATS = [
   ['every year', 'yearly'],
 ];
 
+/** Lowercase name, and the single letter the picker shows. */
+const DAYS = [
+  ['monday', 'M'],
+  ['tuesday', 'T'],
+  ['wednesday', 'W'],
+  ['thursday', 'T'],
+  ['friday', 'F'],
+  ['saturday', 'S'],
+  ['sunday', 'S'],
+];
+
+/**
+ * The weekdays named in a rule's description.
+ *
+ * "every Monday and Wednesday" -> ['monday', 'wednesday']. Only a rule that
+ * names days at all has any: "every weekday" is a set the core spells out as a
+ * word, and pre-selecting M-F from it would turn a preset into a custom rule
+ * the moment the popover opened.
+ */
+function daysIn(label) {
+  const words = label.toLowerCase();
+  if (!DAYS.some(([name]) => words.includes(name))) return [];
+  return DAYS.filter(([name]) => words.includes(name)).map(([name]) => name);
+}
+
 function closePops(root) {
   for (const pop of root.querySelectorAll('.pop')) pop.remove();
 }
@@ -177,7 +202,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
     openPop(root, dateChip, (pop, close) => {
       pop.appendChild(
         miniCalendar(dueIso, todayDate, (iso) => {
-          actions.edit({ due: [iso] });
+          actions.edit({ due: iso });
           close();
         }),
       );
@@ -194,7 +219,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
       ]) {
         quick.appendChild(
           el('button', { type: 'button', text: label, onclick: () => {
-            actions.edit({ due: [iso] });
+            actions.edit({ due: iso });
             close();
           } }),
         );
@@ -202,13 +227,13 @@ export function renderDetail(root, task, { todayDate, actions }) {
       pop.appendChild(quick);
 
       const time = el('input', { type: 'time', value: shortTime(task.time) });
-      time.addEventListener('change', () => actions.edit({ time: [time.value || null] }));
+      time.addEventListener('change', () => actions.edit({ time: time.value || null }));
       pop.appendChild(el('label', { class: 'pop-field' }, [el('span', { text: 'time' }), time]));
 
       pop.appendChild(
         el('div', { class: 'pop-row' }, [
           el('button', { type: 'button', class: 'danger', text: 'clear', onclick: () => {
-            actions.edit({ due: [null], time: [null] });
+            actions.edit({ due: null, time: null });
             close();
           } }),
         ]),
@@ -230,17 +255,52 @@ export function renderDetail(root, task, { todayDate, actions }) {
         pop.appendChild(
           el('button', {
             type: 'button',
-            style: 'display:block;width:100%;text-align:left;margin-bottom:4px',
-            class: value === current ? 'on' : '',
+            class: `repeat-option ${value === current ? 'on' : ''}`,
             text: label,
             onclick: () => {
-              actions.edit({ recurrence: [value || null] });
+              actions.edit({ recurrence: value || null });
               close();
             },
           }),
         );
       }
-      if (current && !REPEATS.some(([value]) => value === current)) {
+
+      // Specific days. The picker composes the same phrase the capture bar
+      // would have parsed — "every Monday and Wednesday" — rather than adding
+      // a second way to say a rule. describe() and the parser are inverses, so
+      // the chosen days come back out of the label they produced.
+      const chosen = new Set(daysIn(current));
+      const row = el('div', { class: 'day-picker' });
+      const send = () => {
+        const picked = DAYS.filter(([name]) => chosen.has(name));
+        actions.edit({
+          recurrence: picked.length ? `every ${picked.map(([n]) => n).join(' and ')}` : null,
+        });
+      };
+      for (const [name, initial] of DAYS) {
+        row.appendChild(
+          el('button', {
+            type: 'button',
+            class: `day-key ${chosen.has(name) ? 'on' : ''}`,
+            text: initial,
+            title: name,
+            'aria-pressed': chosen.has(name) ? 'true' : 'false',
+            onclick: (event) => {
+              const button = event.currentTarget;
+              if (chosen.has(name)) chosen.delete(name);
+              else chosen.add(name);
+              button.classList.toggle('on', chosen.has(name));
+              button.setAttribute('aria-pressed', chosen.has(name) ? 'true' : 'false');
+              // The popover stays open: picking three days is three clicks.
+              send();
+            },
+          }),
+        );
+      }
+      pop.appendChild(el('div', { class: 'pop-label', text: 'on these days' }));
+      pop.appendChild(row);
+
+      if (current && !REPEATS.some(([value]) => value === current) && !chosen.size) {
         pop.appendChild(el('p', { class: 'pop-note', text: `now: ${current}` }));
       }
     }),

@@ -19,6 +19,22 @@ pub fn weekday(word: &str) -> Option<Weekday> {
     })
 }
 
+/// One weekday, or a slash-separated run of them: "mon/wed/fri".
+///
+/// The tokenizer splits on whitespace alone, so a run written with slashes
+/// arrives as a single token. Writing days that way is common enough in a
+/// calendar or a gym plan to be worth reading.
+pub fn weekday_run(word: &str) -> Option<crate::task::WeekdaySet> {
+    if !word.contains('/') {
+        return weekday(word).map(crate::task::WeekdaySet::from_day);
+    }
+    let mut days = crate::task::WeekdaySet::EMPTY;
+    for part in word.split('/') {
+        days.insert(weekday(part.trim())?);
+    }
+    (!days.is_empty()).then_some(days)
+}
+
 /// Recognizes only the plural form ("mondays"), which reads as a recurrence on
 /// its own where the singular does not.
 ///

@@ -422,3 +422,14 @@ fn punctuation_and_spacing_survive() {
               due: today(), time: time(17, 0), rec: Recurrence::Daily),
     ]);
 }
+
+/// Days written with slashes, the way a gym plan or a calendar writes them.
+#[test]
+fn weekday_runs_may_use_slashes() {
+    use kairos_core::recurrence_from_phrase;
+    let expected = recurrence_from_phrase("every monday and wednesday and friday");
+    assert_eq!(recurrence_from_phrase("every mon/wed/fri"), expected);
+    assert_eq!(recurrence_from_phrase("every monday/wednesday/friday"), expected);
+    // A slash between things that are not all weekdays is not a weekday run.
+    assert_eq!(recurrence_from_phrase("every mon/nonsense"), None);
+}
