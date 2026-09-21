@@ -110,6 +110,8 @@ pub fn read_routine(text: &str, fallback_name: &str) -> RoutineFile {
     let mut exercises: Vec<Exercise> = Vec::new();
     let mut sessions: Vec<SessionLog> = Vec::new();
     let mut in_exercises = false;
+    // Which session the lines being read belong to.
+    let mut current: Option<usize> = None;
 
     for line in text.lines() {
         let trimmed = line.trim();
@@ -120,21 +122,33 @@ pub fn read_routine(text: &str, fallback_name: &str) -> RoutineFile {
             if heading.eq_ignore_ascii_case("exercises") {
                 in_exercises = true;
             } else if let Ok(date) = NaiveDate::parse_from_str(heading, DATE) {
-                sessions.push(SessionLog {
-                    session: Session {
-                        id: session_id(id, date),
-                        routine: id,
-                        date,
-                        note: String::new(),
-                    },
-                    sets: Vec::new(),
-                });
+                // A session is identified by its date, so a file that names
+                // the same date twice is describing one session in two
+                // pieces — not two sessions that happen to collide. Carry on
+                // filling the one already open.
+                current = match sessions.iter().position(|log| log.session.date == date) {
+                    Some(index) => Some(index),
+                    None => {
+                        sessions.push(SessionLog {
+                            session: Session {
+                                id: session_id(id, date),
+                                routine: id,
+                                date,
+                                note: String::new(),
+                            },
+                            sets: Vec::new(),
+                        });
+                        Some(sessions.len() - 1)
+                    }
+                };
+            } else {
+                current = None;
             }
             continue;
         }
 
         if let Some(note) = trimmed.strip_prefix('>') {
-            if let Some(log) = sessions.last_mut() {
+            if let Some(log) = current.and_then(|index| sessions.get_mut(index)) {
                 if !log.session.note.is_empty() {
                     log.session.note.push('\n');
                 }
@@ -154,7 +168,7 @@ pub fn read_routine(text: &str, fallback_name: &str) -> RoutineFile {
         }
 
         // Inside a session: "Bench press: 10x60, 8x65"
-        let Some(log) = sessions.last_mut() else { continue };
+        let Some(log) = current.and_then(|index| sessions.get_mut(index)) else { continue };
         let Some((exercise_name, sets)) = rest.split_once(':') else { continue };
         let exercise_name = one_line(exercise_name);
         if exercise_name.is_empty() {
@@ -164,13 +178,17 @@ pub fn read_routine(text: &str, fallback_name: &str) -> RoutineFile {
         // a convenience, not a gate.
         let exercise = add_exercise(&mut exercises, id, &exercise_name);
 
-        for (index, chunk) in sets.split(',').enumerate() {
+        // Numbered from whatever this exercise has already used, so merging
+        // two blocks for one date cannot produce two set number ones.
+        let mut number = log.sets.iter().filter(|s| s.exercise == exercise).count() as u32;
+        for chunk in sets.split(',') {
             let chunk = chunk.trim();
             if chunk.is_empty() {
                 continue;
             }
             let Some((reps, weight)) = split_set(chunk) else { continue };
-            log.sets.push(SetEntry { exercise, index: index as u32 + 1, reps, weight });
+            number += 1;
+            log.sets.push(SetEntry { exercise, index: number, reps, weight });
         }
     }
 

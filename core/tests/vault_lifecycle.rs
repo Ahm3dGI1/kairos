@@ -340,3 +340,72 @@ fn a_link_survives_a_trip_through_the_files() {
     let back = store.get(task.id).unwrap().unwrap();
     assert_eq!(back.habit, Some(gym.id));
 }
+
+/// The crash this is here to prevent: a session is named by its date, so two
+/// sessions on one date derive one id, and the import that follows used to
+/// fail on the UNIQUE constraint — at startup, before a window existed.
+#[test]
+fn a_repeated_date_does_not_break_the_import() {
+    let temp = Temp::new("dup-session");
+    let vault = temp.vault();
+    let mut store = Store::in_memory().unwrap();
+
+    // Written by hand, which is the way it can still happen.
+    temp.write(
+        "workouts/push.md",
+        "# Push\n\n## Exercises\n\n- Bench press\n\n\
+         ## 2026-09-21\n\n- Bench press: 10x60\n> first half\n\n\
+         ## 2026-09-21\n\n- Bench press: 8x65\n",
+    );
+
+    let snapshot = vault.read(today()).unwrap();
+    assert_eq!(snapshot.sessions.len(), 1, "one date is one session");
+    store.restore(&snapshot).expect("the import must not fail");
+
+    // The routine's identity comes from the file, so read it back from the
+    // store rather than from anything created before the import.
+    let routines = store.routines().unwrap();
+    assert_eq!(routines.len(), 1);
+    let sessions = store.sessions(routines[0].id, 10).unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].sets.len(), 2, "both blocks' sets were kept");
+    assert_eq!(sessions[0].session.note, "first half");
+
+    // And the set numbers did not collide, which is what the store keys on.
+    let mut numbers: Vec<u32> = sessions[0].sets.iter().map(|s| s.index).collect();
+    numbers.sort_unstable();
+    assert_eq!(numbers, [1, 2]);
+}
+
+/// Where the duplicate came from in the first place.
+#[test]
+fn starting_todays_session_twice_reopens_it() {
+    let mut store = Store::in_memory().unwrap();
+    let routine = store.add_routine("Push").unwrap();
+
+    let first = store.start_session(routine.id, today()).unwrap();
+    let again = store.start_session(routine.id, today()).unwrap();
+
+    assert_eq!(first.session.id, again.session.id);
+    assert_eq!(store.sessions(routine.id, 10).unwrap().len(), 1);
+
+    // A different day is still a different session.
+    let tomorrow = today().succ_opt().unwrap();
+    store.start_session(routine.id, tomorrow).unwrap();
+    assert_eq!(store.sessions(routine.id, 10).unwrap().len(), 2);
+}
+
+/// The same defence, one level up: a repeated id anywhere in the vault costs
+/// that one record, not the ability to start.
+#[test]
+fn a_duplicate_id_costs_one_record_not_the_import() {
+    let mut store = Store::in_memory().unwrap();
+    let mut snapshot = store.snapshot().unwrap();
+
+    let habit = kairos_core::daily::Habit::new("Gym", today(), 0);
+    snapshot.habits.push(habit.clone());
+    snapshot.habits.push(habit);
+
+    store.restore(&snapshot).expect("a repeated habit must not fail the import");
+    assert_eq!(store.habits(true).unwrap().len(), 1);
+}

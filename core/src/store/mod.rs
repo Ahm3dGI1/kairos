@@ -464,6 +464,16 @@ impl Store {
     /// re-typing it: almost every set repeats, and the ones that change are the
     /// interesting ones.
     pub fn start_session(&mut self, routine: RoutineId, date: NaiveDate) -> Result<SessionLog> {
+        // One session per routine per day. Pressing "start" again is someone
+        // coming back to the same workout, not beginning a second one — and
+        // two sessions on one date cannot be told apart afterwards, because
+        // the date is what names a session in the vault.
+        if let Some(existing) =
+            self.sessions(routine, u32::MAX)?.into_iter().find(|log| log.session.date == date)
+        {
+            return Ok(existing);
+        }
+
         let previous = self.sessions(routine, 1)?.into_iter().next();
         let session = Session::new(routine, date);
         self.conn.execute(

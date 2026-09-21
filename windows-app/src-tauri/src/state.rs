@@ -109,12 +109,30 @@ pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             // mid-sync, a network share that has not come back. So take a copy
             // of what is about to be replaced first.
             back_up(&paths.data_dir, &store);
-            let snapshot = vault.read(today)?;
-            store.restore(&snapshot)?;
+
+            // Never fatal. The vault is a folder of text files that anyone can
+            // edit, so it can say something the database cannot accept — and
+            // an app that refuses to start because of it is an app you cannot
+            // use to fix it. Carry on with the database as it stands and say
+            // what went wrong.
+            match vault
+                .read(today)
+                .map_err(|e| e.to_string())
+                .and_then(|snapshot| store.restore(&snapshot).map_err(|e| e.to_string()))
+            {
+                Ok(()) => {}
+                Err(error) => eprintln!("could not read the vault, keeping the database: {error}"),
+            }
         } else {
             // First run, or a vault the user moved to an empty folder: seed it
             // from whatever the database already holds.
-            vault.write(&store.snapshot()?)?;
+            if let Err(error) = store
+                .snapshot()
+                .map_err(|e| e.to_string())
+                .and_then(|snapshot| vault.write(&snapshot).map_err(|e| e.to_string()))
+            {
+                eprintln!("could not seed the vault: {error}");
+            }
         }
     }
 

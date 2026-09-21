@@ -87,6 +87,12 @@ impl Store {
     }
 
     fn restore_inner(&self, snapshot: &Snapshot) -> Result<()> {
+        // Every id below comes from a text file the user can edit, and two of
+        // them are derived from what the file says rather than written in it —
+        // a routine's name, a session's date. So a repeated id is not a bug in
+        // the writer, it is a thing a person can type, and an import that
+        // fails on one takes the whole app down with it. First one wins.
+        let mut seen: std::collections::HashSet<uuid::Uuid> = std::collections::HashSet::new();
         self.conn.execute_batch(
             "DELETE FROM sets;
              DELETE FROM sessions;
@@ -99,9 +105,13 @@ impl Store {
         )?;
 
         for task in &snapshot.tasks {
+            // Tasks upsert, so a duplicate id merges rather than collides.
             self.write(task)?;
         }
         for habit in &snapshot.habits {
+            if !seen.insert(habit.id) {
+                continue;
+            }
             self.conn.execute(
                 "INSERT INTO habits (id, name, created_at, archived, position, kind)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -122,12 +132,18 @@ impl Store {
             self.write_month_journal(journal)?;
         }
         for routine in &snapshot.routines {
+            if !seen.insert(routine.id) {
+                continue;
+            }
             self.conn.execute(
                 "INSERT INTO routines (id, name, position) VALUES (?1, ?2, ?3)",
                 params![routine.id.to_string(), routine.name, routine.position],
             )?;
         }
         for exercise in &snapshot.exercises {
+            if !seen.insert(exercise.id) {
+                continue;
+            }
             self.conn.execute(
                 "INSERT INTO exercises (id, routine, name, position) VALUES (?1, ?2, ?3, ?4)",
                 params![
@@ -139,6 +155,9 @@ impl Store {
             )?;
         }
         for log in &snapshot.sessions {
+            if !seen.insert(log.session.id) {
+                continue;
+            }
             self.conn.execute(
                 "INSERT INTO sessions (id, routine, date, note) VALUES (?1, ?2, ?3, ?4)",
                 params![
