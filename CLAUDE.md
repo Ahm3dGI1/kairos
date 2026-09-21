@@ -17,10 +17,9 @@ paid tier. Phase 1 targets Windows 11; Linux, Android, and iPad follow later.
 
 A todo app whose defining interaction is single-line natural-language capture. Beyond capture, v1
 covers priorities, tags, subtasks, projects/sections, recurring tasks with per-occurrence
-exceptions, a calendar view, habits, a workout book, prayer times, quick filters, search, and
-keyboard-first navigation — plus
-Windows-native touches: a tray icon with hover preview, an always-visible desktop widget, and a
-global hotkey launcher. Everything is stored as plain Markdown you can edit in any editor; sync
+exceptions, a calendar view, habits, a workout book, prayer times, quick filters, search and
+keyboard-first navigation — plus Windows-native touches: a tray icon with hover preview, an
+always-visible desktop widget, and a global hotkey launcher. Everything is stored as plain Markdown you can edit in any editor; sync
 is an optional layer on top, served by a server users host themselves.
 
 **The full spec lives in [`docs/todo-app-spec.md`](docs/todo-app-spec.md) — read it before making
