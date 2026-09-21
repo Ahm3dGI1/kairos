@@ -79,6 +79,9 @@ impl Vault {
             by_project.entry(task.project.clone()).or_default().push(task.clone());
         }
 
+        let habit_names: tasks::HabitNames =
+            snapshot.habits.iter().map(|h| (h.id, h.name.clone())).collect();
+
         let dir = self.root.join(TASKS_DIR);
         std::fs::create_dir_all(&dir)?;
         let mut expected = HashSet::new();
@@ -87,8 +90,10 @@ impl Vault {
             group.sort_by_key(|t| (t.due, t.created_at, t.id));
             let name = format!("{}.md", tasks::slug(project.as_deref()));
             expected.insert(name.clone());
-            changed |=
-                write_if_changed(&dir.join(name), &tasks::write_file(project.as_deref(), &group))?;
+            changed |= write_if_changed(
+                &dir.join(name),
+                &tasks::write_file(project.as_deref(), &group, &habit_names),
+            )?;
         }
         changed |= prune(&dir, &expected)?;
 
@@ -169,8 +174,14 @@ impl Vault {
     pub fn read(&self, today: NaiveDate) -> std::io::Result<Snapshot> {
         let mut snapshot = Snapshot::default();
 
+        // Habits first: a task may name one, and the name only resolves once
+        // the definitions are in hand.
+        self.read_habits_into(&mut snapshot, today);
+        let by_name: tasks::HabitIds =
+            snapshot.habits.iter().map(|h| (h.name.to_lowercase(), h.id)).collect();
+
         for (path, text) in markdown_in(&self.root.join(TASKS_DIR)) {
-            let (heading, mut found) = tasks::read_file(&text, today);
+            let (heading, mut found) = tasks::read_file(&text, today, &by_name);
             let project = heading.or_else(|| {
                 let stem = path.file_stem()?.to_string_lossy().to_string();
                 (stem != "inbox").then_some(stem)
@@ -181,7 +192,24 @@ impl Vault {
             snapshot.tasks.append(&mut found);
         }
 
-        // Definitions first, so the month files can resolve names to ids.
+        for (index, (path, text)) in markdown_in(&self.root.join(WORKOUTS_DIR)).enumerate() {
+            let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+            let mut file = workouts::read_routine(&text, &stem);
+            file.routine.position = index as i64;
+            snapshot.routines.push(file.routine);
+            snapshot.exercises.append(&mut file.exercises);
+            snapshot.sessions.append(&mut file.sessions);
+        }
+
+        Ok(snapshot)
+    }
+
+    /// Reads the habit definitions and every month file into `snapshot`.
+    ///
+    /// Separate from the rest of [`Vault::read`] because it has to run first:
+    /// a task line can name a habit, and the name only resolves once the
+    /// definitions are in hand.
+    fn read_habits_into(&self, snapshot: &mut Snapshot, today: NaiveDate) {
         let dir = self.root.join(HABITS_DIR);
         if let Ok(text) = std::fs::read_to_string(dir.join(HABITS_FILE)) {
             snapshot.habits = habits::read_habits(&text, today);
@@ -196,7 +224,7 @@ impl Vault {
 
             // A month file naming a habit no definition knew about creates it —
             // which is what makes `- Swim: 5 6 7` in a text editor enough.
-            for name in found.unknown_habits {
+            for (name, kind) in found.unknown_habits {
                 let id = habits::derived_habit_id(&name);
                 if known.values().any(|existing| *existing == id) {
                     continue;
@@ -205,6 +233,7 @@ impl Vault {
                 snapshot.habits.push(Habit {
                     id,
                     name,
+                    kind,
                     created_at: NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(today),
                     archived: false,
                     position: snapshot.habits.len() as i64,
@@ -217,17 +246,6 @@ impl Vault {
             }
         }
         snapshot.day_logs.sort_by_key(|log| log.date);
-
-        for (index, (path, text)) in markdown_in(&self.root.join(WORKOUTS_DIR)).enumerate() {
-            let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
-            let mut file = workouts::read_routine(&text, &stem);
-            file.routine.position = index as i64;
-            snapshot.routines.push(file.routine);
-            snapshot.exercises.append(&mut file.exercises);
-            snapshot.sessions.append(&mut file.sessions);
-        }
-
-        Ok(snapshot)
     }
 }
 
@@ -319,9 +337,20 @@ Two things worth knowing:
 ## habits/
 
 `habits.md` lists the habits; anything under an `## Archived` heading is
-retired. `2026-09.md` is one month: which days each habit was ticked, a table
-of the two numbers, and the month's journal. Naming a habit in a month file is
-enough to create it.
+retired. A habit is a tick unless it says otherwise:
+
+    - Gym created:2026-01-05 ^<id>
+    - Sleep kind:duration created:2026-01-05 ^<id>
+    - Pages kind:number:pages created:2026-01-05 ^<id>
+
+`2026-09.md` is one month. `## Ticks` lists the days each tick-habit was done;
+`## Days` is a table with a column per numeric habit; then the month's
+journal. Naming a habit in either is enough to create it — a column whose
+first value reads as a time becomes a duration, and one holding a bare count
+becomes a number.
+
+A task can name a habit with `habit:Gym`, and completing that task ticks the
+habit for the day.
 
 ## workouts/
 
@@ -385,8 +414,12 @@ mod tests {
         let habit = store.add_habit("Read", today()).unwrap();
         store.toggle_habit(habit.id, today()).unwrap();
 
+        let mut sleep = store.add_habit("Sleep", today()).unwrap();
+        sleep.kind = crate::daily::HabitKind::Duration;
+        store.save_habit(&sleep).unwrap();
+
         let mut log = store.day_log(today()).unwrap();
-        log.sleep_minutes = Some(450);
+        log.set_value(sleep.id, Some(450.0));
         store.save_day_log(&log).unwrap();
 
         let routine = store.add_routine("Push").unwrap();
@@ -423,11 +456,13 @@ mod tests {
         assert_eq!(report.notes, "Two pages, no more.");
         assert_eq!(report.subtasks.len(), 1);
 
-        assert_eq!(back.habits.len(), 1);
-        assert_eq!(back.habits[0].name, "Read");
+        assert_eq!(back.habits.len(), 2);
+        let read = back.habits.iter().find(|h| h.name == "Read").unwrap();
+        let sleep = back.habits.iter().find(|h| h.name == "Sleep").unwrap();
+        assert_eq!(sleep.kind, crate::daily::HabitKind::Duration);
         assert_eq!(back.day_logs.len(), 1);
-        assert_eq!(back.day_logs[0].sleep_minutes, Some(450));
-        assert!(back.day_logs[0].is_done(back.habits[0].id));
+        assert_eq!(back.day_logs[0].value(sleep.id), Some(450.0));
+        assert!(back.day_logs[0].is_done(read.id));
 
         assert_eq!(back.routines.len(), 1);
         assert_eq!(back.exercises.len(), 1);

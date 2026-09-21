@@ -261,6 +261,9 @@ pub struct Edit {
     recurrence: Option<Option<String>>,
     /// "all" or "one-per-occurrence".
     checklist: Option<String>,
+    /// The habit this task stands for, or null to unlink it.
+    #[serde(default, deserialize_with = "sent")]
+    habit: Option<Option<kairos_core::HabitId>>,
 }
 
 #[tauri::command]
@@ -291,6 +294,9 @@ pub fn update_task(app: AppHandle, state: State<'_, AppState>, edit: Edit) -> Cm
             for tag in tags {
                 task.add_tag(tag);
             }
+        }
+        if let Some(habit) = edit.habit {
+            task.habit = habit;
         }
         if let Some(mode) = edit.checklist {
             task.checklist = kairos_core::Checklist::parse(&mode);

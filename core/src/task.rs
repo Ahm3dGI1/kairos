@@ -39,6 +39,15 @@ pub struct Task {
     /// works through one occurrence at a time.
     #[serde(default)]
     pub checklist: Checklist,
+    /// A habit this task stands for.
+    ///
+    /// "Gym" is both a thing to do five times a week and a thing to have a run
+    /// of, and keeping them as two separate records means ticking both by
+    /// hand. Completing a linked task ticks the habit for that day — one
+    /// direction only, because completing is the act and the tick is its
+    /// record, not the other way round.
+    #[serde(default)]
+    pub habit: Option<crate::daily::HabitId>,
     /// When this was completed. For a recurring task, completion advances
     /// [`Task::due`] to the next occurrence instead of setting this.
     pub completed_at: Option<NaiveDate>,
@@ -60,6 +69,7 @@ impl Task {
             project: None,
             subtasks: Vec::new(),
             checklist: Checklist::All,
+            habit: None,
             completed_at: None,
             created_at,
         }

@@ -103,14 +103,15 @@ impl Store {
         }
         for habit in &snapshot.habits {
             self.conn.execute(
-                "INSERT INTO habits (id, name, created_at, archived, position)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO habits (id, name, created_at, archived, position, kind)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     habit.id.to_string(),
                     habit.name,
                     habit.created_at.format(DATE_FORMAT).to_string(),
                     habit.archived,
                     habit.position,
+                    habit.kind.label(),
                 ],
             )?;
         }

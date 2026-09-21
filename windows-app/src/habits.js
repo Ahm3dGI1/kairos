@@ -90,10 +90,21 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
 
     // The stats belong on the right, where every row's read the same way.
     const elapsed = data.days.filter((d) => !d.is_future).length;
-    const stats = [`${habit.count}/${elapsed}`];
-    if (habit.streak > 0) stats.push(`${habit.streak}d streak`);
+    const stats = habit.numeric
+      ? [habit.average ?? '—', `${habit.count}/${elapsed}`]
+      : [`${habit.count}/${elapsed}`];
+    if (!habit.numeric && habit.streak > 0) stats.push(`${habit.streak}d streak`);
 
     const days = el('div', { class: 'habit-days' });
+    if (habit.numeric) {
+      numericDays(habit, days);
+      return el('div', { class: 'habit-row' }, [
+        el('div', { class: 'habit-name' }, [name, kindTag(habit)]),
+        days,
+        el('span', { class: 'habit-total', text: stats.join(' · ') }),
+      ]);
+    }
+
     habit.done.forEach((done, index) => {
       const day = data.days[index];
       const classes = ['day'];
@@ -122,6 +133,101 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
       days,
       el('span', { class: 'habit-total', text: stats.join(' · ') }),
     ]);
+  }
+
+  /** The unit, so a row of bare blocks still says what it counts. */
+  function kindTag(habit) {
+    const unit = habit.kind.startsWith('number:')
+      ? habit.kind.slice('number:'.length)
+      : habit.kind === 'duration'
+        ? 'h/m'
+        : '';
+    return unit ? el('span', { class: 'sub', text: unit }) : null;
+  }
+
+  /**
+   * A numeric row on the same 31-column grid as every other.
+   *
+   * A cell is too narrow for "7h 30m", so the value is shown as an intensity —
+   * darkest is the month's largest — and read exactly on hover. Clicking opens
+   * an input over the cell, which is the only place wide enough for one.
+   */
+  function numericDays(habit, days) {
+    const numbers = habit.values.map(parseLeadingNumber);
+    const top = Math.max(...numbers.filter((n) => n !== null), 0);
+
+    habit.values.forEach((text, index) => {
+      const day = data.days[index];
+      const value = numbers[index];
+      const classes = ['day', 'num'];
+      if (day.is_future) classes.push('ahead');
+      else if (value === null) classes.push('blank');
+
+      const cell = el('button', {
+        type: 'button',
+        class: classes.join(' '),
+        title: `${habit.name} · ${day.date}${text ? ` · ${text}` : ''}`,
+        'aria-label': `${habit.name} on ${day.date}${text ? `: ${text}` : ''}`,
+        disabled: day.is_future ? '' : null,
+      });
+      if (value !== null && top > 0) {
+        // A floor of 0.18 so the smallest recorded day is still visible as a
+        // day that recorded something, rather than as a blank.
+        cell.style.opacity = String(0.18 + 0.82 * (value / top));
+        cell.classList.add('on');
+      }
+      if (!day.is_future) {
+        cell.addEventListener('click', () => editCell(habit, day, text, cell, days));
+      }
+      days.appendChild(cell);
+    });
+  }
+
+  /** An input floated over one cell, because a 19px cell cannot hold one. */
+  function editCell(habit, day, current, cell, days) {
+    days.querySelector('.cell-input')?.remove();
+
+    const input = el('input', {
+      class: 'cell-input',
+      type: 'text',
+      value: current ?? '',
+      spellcheck: 'false',
+      placeholder: habit.kind === 'duration' ? '7h 30m' : '0',
+    });
+    input.style.left = `${cell.offsetLeft}px`;
+    days.appendChild(input);
+    input.focus();
+    input.select();
+
+    let closed = false;
+    const commit = async (save) => {
+      if (closed) return;
+      closed = true;
+      const value = input.value;
+      input.remove();
+      if (!save) return;
+      await call('set_habit_value', { date: day.date, id: habit.id, value }, 'Habit value');
+      load();
+    };
+    input.addEventListener('blur', () => commit(true));
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') commit(true);
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        commit(false);
+      }
+    });
+  }
+
+  /** "7h 30m" and "42 pages" both start with the number that matters. */
+  function parseLeadingNumber(text) {
+    if (!text) return null;
+    const hours = /^(\d+(?:\.\d+)?)h(?:\s*(\d+)m?)?$/i.exec(text.trim());
+    if (hours) return Number(hours[1]) * 60 + Number(hours[2] ?? 0);
+    const minutes = /^(\d+)m$/i.exec(text.trim());
+    if (minutes) return Number(minutes[1]);
+    const plain = parseFloat(text);
+    return Number.isFinite(plain) ? plain : null;
   }
 
   /** Space on the habits page ticks every habit for today — the common case. */
@@ -252,8 +358,24 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
     load();
   }
 
-  async function addHabit(name) {
-    await call('add_habit', { name }, 'Add habit');
+  /**
+   * Adds a habit, optionally saying what it records: "Sleep :duration",
+   * "Pages :number pages". Bare means a tick, which is the common case.
+   */
+  async function addHabit(line) {
+    const [name, ...rest] = String(line).split(':');
+    const spec = rest.join(':').trim();
+    const kind = spec
+      ? spec.startsWith('number')
+        ? `number:${spec.slice('number'.length).trim()}`.replace(/:$/, '')
+        : spec.split(/\s+/)[0]
+      : null;
+    return addHabitNamed(name.trim(), kind);
+  }
+
+  async function addHabitNamed(name, kind) {
+    if (!name) return;
+    await call('add_habit', { name, kind }, 'Add habit');
     load();
   }
 

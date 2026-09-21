@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use chrono::{Datelike, NaiveDate};
 use uuid::Uuid;
 
-use crate::daily::{parse_duration, DayLog, Habit, HabitId, JournalEntry, MonthJournal};
+use crate::daily::{DayLog, Habit, HabitId, HabitKind, JournalEntry, MonthJournal};
 
 const DATE: &str = "%Y-%m-%d";
 
@@ -70,8 +70,13 @@ pub fn write_habits(habits: &[Habit]) -> String {
 }
 
 fn habit_line(habit: &Habit) -> String {
+    let kind = match &habit.kind {
+        // A tick is the default, so saying so would only be noise.
+        HabitKind::Check => String::new(),
+        other => format!(" kind:{}", other.label()),
+    };
     format!(
-        "- {} created:{} ^{}\n",
+        "- {}{kind} created:{} ^{}\n",
         habit.name.replace(['\n', ':'], " ").trim(),
         habit.created_at.format(DATE),
         habit.id
@@ -94,7 +99,12 @@ pub fn read_habits(text: &str, today: NaiveDate) -> Vec<Habit> {
         let mut name_parts = Vec::new();
         let mut id = None;
         let mut created = today;
+        let mut kind = HabitKind::Check;
         for token in rest.split_whitespace() {
+            if let Some(raw) = token.strip_prefix("kind:") {
+                kind = HabitKind::parse(raw);
+                continue;
+            }
             if let Some(raw) = token.strip_prefix('^') {
                 if let Ok(parsed) = Uuid::parse_str(raw) {
                     id = Some(parsed);
@@ -117,6 +127,7 @@ pub fn read_habits(text: &str, today: NaiveDate) -> Vec<Habit> {
         habits.push(Habit {
             id: id.unwrap_or_else(Uuid::new_v4),
             name,
+            kind,
             created_at: created,
             archived,
             position: habits.len() as i64,
@@ -128,13 +139,13 @@ pub fn read_habits(text: &str, today: NaiveDate) -> Vec<Habit> {
 // --------------------------------------------------------------------- months
 
 /// What one month file holds.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Month {
     pub logs: Vec<DayLog>,
     pub journal: Vec<JournalEntry>,
-    /// Habits named in the ticks that no definition file knew about — the
-    /// caller creates them.
-    pub unknown_habits: Vec<String>,
+    /// Habits named in this file that no definition knew about, with the kind
+    /// the file implies — the caller creates them.
+    pub unknown_habits: Vec<(String, HabitKind)>,
 }
 
 /// Renders one month file. `names` resolves the habit ids in `logs`.
@@ -148,7 +159,7 @@ pub fn write_month(
     let mut out = format!("# {} {year}\n", MONTHS[(month as usize - 1).min(11)]);
 
     let mut ticks: Vec<(String, Vec<u32>)> = Vec::new();
-    for habit in habits {
+    for habit in habits.iter().filter(|h| !h.kind.is_numeric()) {
         let days: Vec<u32> =
             logs.iter().filter(|log| log.is_done(habit.id)).map(|log| log.date.day()).collect();
         if !days.is_empty() {
@@ -164,21 +175,30 @@ pub fn write_month(
         }
     }
 
-    let measured: Vec<&DayLog> = logs
+    // A column for every numeric habit that recorded something this month.
+    // Screen time and sleep used to be the only two and were written in by
+    // name; they are ordinary habits now and reach the table the same way any
+    // other number does.
+    let columns: Vec<&Habit> = habits
         .iter()
-        .filter(|log| log.screen_minutes.is_some() || log.sleep_minutes.is_some())
+        .filter(|h| h.kind.is_numeric() && logs.iter().any(|log| log.value(h.id).is_some()))
         .collect();
-    if !measured.is_empty() {
-        out.push_str("\n## Days\n\n| Day | Screen | Sleep |\n| --- | --- | --- |\n");
-        let mut measured = measured;
+    let mut measured: Vec<&DayLog> =
+        logs.iter().filter(|log| columns.iter().any(|h| log.value(h.id).is_some())).collect();
+
+    if !columns.is_empty() && !measured.is_empty() {
         measured.sort_by_key(|log| log.date);
+        let names: Vec<&str> = columns.iter().map(|h| h.name.as_str()).collect();
+        let rule = vec!["---"; columns.len() + 1];
+        out.push_str(&format!("\n## Days\n\n| Day | {} |\n", names.join(" | ")));
+        out.push_str(&format!("| {} |\n", rule.join(" | ")));
+
         for log in measured {
-            out.push_str(&format!(
-                "| {} | {} | {} |\n",
-                log.date.day(),
-                log.screen_minutes.map(crate::daily::format_duration).unwrap_or_default(),
-                log.sleep_minutes.map(crate::daily::format_duration).unwrap_or_default(),
-            ));
+            let cells: Vec<String> = columns
+                .iter()
+                .map(|h| log.value(h.id).map(|v| h.kind.format(v)).unwrap_or_default())
+                .collect();
+            out.push_str(&format!("| {} | {} |\n", log.date.day(), cells.join(" | ")));
         }
     }
 
@@ -203,6 +223,9 @@ pub fn read_month(text: &str, year: i32, month: u32, known: &HashMap<String, Hab
     let mut section = Section::None;
     let mut entry: Option<JournalEntry> = None;
     let mut body = String::new();
+    // Each Days column: the habit it names, and the kind once one value has
+    // settled it.
+    let mut columns: Vec<(String, Option<HabitKind>)> = Vec::new();
 
     let day_of = |day: u32| NaiveDate::from_ymd_opt(year, month, day);
 
@@ -241,17 +264,7 @@ pub fn read_month(text: &str, year: i32, month: u32, known: &HashMap<String, Hab
                 if name.is_empty() {
                     continue;
                 }
-                let id = match known.get(&name.to_lowercase()) {
-                    Some(id) => *id,
-                    None => {
-                        if !result.unknown_habits.iter().any(|n| n.eq_ignore_ascii_case(name)) {
-                            result.unknown_habits.push(name.to_string());
-                        }
-                        // A habit the caller is about to create needs a stable
-                        // id now, so the ticks can point at it.
-                        derived_habit_id(name)
-                    }
-                };
+                let id = resolve(&mut result, known, name, HabitKind::Check);
                 for token in days.split([' ', ',', '\t']) {
                     let Ok(day) = token.trim().parse::<u32>() else { continue };
                     let Some(date) = day_of(day) else { continue };
@@ -266,11 +279,33 @@ pub fn read_month(text: &str, year: i32, month: u32, known: &HashMap<String, Hab
                 if row.len() < 2 {
                     continue;
                 }
-                let Ok(day) = row[0].parse::<u32>() else { continue };
+                // The first row is the header: its cells after "Day" name the
+                // habits the columns belong to. An older file whose header
+                // reads "Day | Screen | Sleep" needs no special case — those
+                // are two habit names like any other.
+                let Ok(day) = row[0].parse::<u32>() else {
+                    columns = row[1..].iter().map(|name| (name.trim().to_string(), None)).collect();
+                    continue;
+                };
                 let Some(date) = day_of(day) else { continue };
-                let log = logs.entry(day).or_insert_with(|| DayLog::new(date));
-                log.screen_minutes = row.get(1).and_then(|v| parse_duration(v));
-                log.sleep_minutes = row.get(2).and_then(|v| parse_duration(v));
+
+                for (index, cell) in row[1..].iter().enumerate() {
+                    let Some((name, resolved)) = columns.get_mut(index) else { continue };
+                    if cell.trim().is_empty() {
+                        continue;
+                    }
+                    // The kind is read off the first value the column shows:
+                    // "7h 30m" is a length of time, "42" is a count. Guessing
+                    // once is what lets a column be written by hand.
+                    let kind = resolved.clone().unwrap_or_else(|| guess_kind(cell));
+                    let id = resolve(&mut result, known, name, kind.clone());
+                    *resolved = Some(kind.clone());
+                    if let Some(value) = kind.parse_value(cell) {
+                        logs.entry(day)
+                            .or_insert_with(|| DayLog::new(date))
+                            .set_value(id, value.into());
+                    }
+                }
             }
             _ => {}
         }
@@ -309,6 +344,34 @@ fn table_row(line: &str) -> Option<Vec<String>> {
         return None;
     }
     Some(cells)
+}
+
+/// Finds the habit a name refers to, noting it for creation if nothing knows
+/// it yet. A habit invented by a month file needs a stable id immediately, so
+/// the entries in that same file can point at it.
+fn resolve(
+    month: &mut Month,
+    known: &HashMap<String, HabitId>,
+    name: &str,
+    kind: HabitKind,
+) -> HabitId {
+    if let Some(id) = known.get(&name.to_lowercase()) {
+        return *id;
+    }
+    if !month.unknown_habits.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)) {
+        month.unknown_habits.push((name.to_string(), kind));
+    }
+    derived_habit_id(name)
+}
+
+/// What kind of number a cell holds, from how it is written.
+fn guess_kind(cell: &str) -> HabitKind {
+    let lowered = cell.to_lowercase();
+    if lowered.contains('h') || lowered.contains('m') {
+        HabitKind::Duration
+    } else {
+        HabitKind::Number { unit: String::new() }
+    }
 }
 
 /// Namespace for habits invented by a month file, so the same name written into
@@ -362,38 +425,48 @@ mod tests {
         assert_eq!(back[0].created_at, gym.created_at);
     }
 
+    fn numeric(name: &str, kind: HabitKind, position: i64) -> Habit {
+        let mut habit = Habit::new(name, date(1), position);
+        habit.kind = kind;
+        habit
+    }
+
     #[test]
     fn a_month_round_trips() {
         let gym = Habit::new("Gym", date(1), 0);
         let read = Habit::new("Read", date(1), 1);
+        let sleep = numeric("Sleep", HabitKind::Duration, 2);
+        let pages = numeric("Pages", HabitKind::Number { unit: "pages".into() }, 3);
 
         let mut logs = vec![DayLog::new(date(1)), DayLog::new(date(3)), DayLog::new(date(5))];
         logs[0].habits_done.push(gym.id);
-        logs[0].screen_minutes = Some(200);
-        logs[0].sleep_minutes = Some(450);
+        logs[0].set_value(sleep.id, Some(450.0));
+        logs[0].set_value(pages.id, Some(42.0));
         logs[1].habits_done.push(gym.id);
         logs[1].habits_done.push(read.id);
-        logs[2].sleep_minutes = Some(400);
+        logs[2].set_value(sleep.id, Some(400.0));
 
         let mut journal = MonthJournal::new(2026, 9);
         let mut entry = JournalEntry::new("Week one");
         entry.body = "It went fine.\n\nMostly.".into();
         journal.entries.push(entry);
 
-        let text = write_month(2026, 9, &[gym.clone(), read.clone()], &logs, &journal);
+        let all = [gym.clone(), read.clone(), sleep.clone(), pages.clone()];
+        let text = write_month(2026, 9, &all, &logs, &journal);
 
-        let known = HashMap::from([("gym".to_string(), gym.id), ("read".to_string(), read.id)]);
+        let known: HashMap<String, HabitId> =
+            all.iter().map(|h| (h.name.to_lowercase(), h.id)).collect();
         let back = read_month(&text, 2026, 9, &known);
 
-        assert!(back.unknown_habits.is_empty());
+        assert!(back.unknown_habits.is_empty(), "wrote:\n{text}");
         assert_eq!(back.logs.len(), 3);
         assert_eq!(back.logs[0].date, date(1));
         assert!(back.logs[0].is_done(gym.id));
-        assert_eq!(back.logs[0].screen_minutes, Some(200));
-        assert_eq!(back.logs[0].sleep_minutes, Some(450));
+        assert_eq!(back.logs[0].value(sleep.id), Some(450.0));
+        assert_eq!(back.logs[0].value(pages.id), Some(42.0));
         assert!(back.logs[1].is_done(read.id));
-        assert_eq!(back.logs[2].sleep_minutes, Some(400));
-        assert_eq!(back.logs[2].screen_minutes, None);
+        assert_eq!(back.logs[2].value(sleep.id), Some(400.0));
+        assert_eq!(back.logs[2].value(pages.id), None);
 
         assert_eq!(back.journal.len(), 1);
         assert_eq!(back.journal[0].title, "Week one");
@@ -405,7 +478,7 @@ mod tests {
     fn a_habit_named_only_in_a_month_file_is_reported_as_new() {
         let text = "# September 2026\n\n## Ticks\n\n- Swim: 5 6 7\n";
         let back = read_month(text, 2026, 9, &HashMap::new());
-        assert_eq!(back.unknown_habits, ["Swim"]);
+        assert_eq!(back.unknown_habits, [("Swim".to_string(), HabitKind::Check)]);
         assert_eq!(back.logs.len(), 3);
         let id = derived_habit_id("Swim");
         assert!(back.logs.iter().all(|log| log.is_done(id)));
@@ -432,6 +505,57 @@ mod tests {
         assert!(back.logs.is_empty());
     }
 
+    /// A number column written by hand: the kind is read off the value, so a
+    /// column can be added to a month file with nothing else set up.
+    #[test]
+    fn a_numeric_column_written_by_hand_creates_the_habit() {
+        let text = "## Days\n\n| Day | Sleep | Pages |\n| --- | --- | --- |\n| 4 | 7h 30m | 42 |\n";
+        let back = read_month(text, 2026, 9, &HashMap::new());
+
+        assert_eq!(
+            back.unknown_habits,
+            [
+                ("Sleep".to_string(), HabitKind::Duration),
+                ("Pages".to_string(), HabitKind::Number { unit: String::new() }),
+            ],
+            "a time reads as a duration, a bare count as a number"
+        );
+        assert_eq!(back.logs.len(), 1);
+        assert_eq!(back.logs[0].value(derived_habit_id("Sleep")), Some(450.0));
+        assert_eq!(back.logs[0].value(derived_habit_id("Pages")), Some(42.0));
+    }
+
+    /// Vaults written before habits had kinds have a "Day | Screen | Sleep"
+    /// table. It needs no special case — those are two habit names like any
+    /// other — but it must keep reading, so this pins it.
+    #[test]
+    fn an_older_months_screen_and_sleep_table_still_reads() {
+        let text = "# September 2026\n\n## Days\n\n| Day | Screen | Sleep |\n                    | --- | --- | --- |\n| 1 | 3h 20m | 7h 30m |\n| 2 |  | 8h |\n";
+        let back = read_month(text, 2026, 9, &HashMap::new());
+
+        let screen = derived_habit_id("Screen");
+        let sleep = derived_habit_id("Sleep");
+        assert_eq!(back.logs.len(), 2);
+        assert_eq!(back.logs[0].value(screen), Some(200.0));
+        assert_eq!(back.logs[0].value(sleep), Some(450.0));
+        assert_eq!(back.logs[1].value(screen), None, "an empty cell is not a zero");
+        assert_eq!(back.logs[1].value(sleep), Some(480.0));
+    }
+
+    #[test]
+    fn habit_kinds_survive_their_definition_file() {
+        let habits = vec![
+            Habit::new("Gym", date(1), 0),
+            numeric("Sleep", HabitKind::Duration, 1),
+            numeric("Water", HabitKind::Number { unit: "glasses".into() }, 2),
+        ];
+        let back = read_habits(&write_habits(&habits), date(20));
+        assert_eq!(back.len(), 3);
+        assert_eq!(back[0].kind, HabitKind::Check);
+        assert_eq!(back[1].kind, HabitKind::Duration);
+        assert_eq!(back[2].kind, HabitKind::Number { unit: "glasses".into() });
+    }
+
     #[test]
     fn month_filenames_parse() {
         assert_eq!(month_of("2026-09.md"), Some((2026, 9)));
@@ -444,15 +568,18 @@ mod tests {
     #[test]
     fn writing_a_month_twice_gives_the_same_text() {
         let gym = Habit::new("Gym", date(1), 0);
+        let sleep = numeric("Sleep", HabitKind::Duration, 1);
         let mut log = DayLog::new(date(2));
         log.habits_done.push(gym.id);
-        log.screen_minutes = Some(90);
+        log.set_value(sleep.id, Some(90.0));
+
+        let habits = [gym.clone(), sleep.clone()];
         let journal = MonthJournal::new(2026, 9);
-        let once =
-            write_month(2026, 9, std::slice::from_ref(&gym), std::slice::from_ref(&log), &journal);
-        let known = HashMap::from([("gym".to_string(), gym.id)]);
+        let once = write_month(2026, 9, &habits, std::slice::from_ref(&log), &journal);
+        let known: HashMap<String, HabitId> =
+            habits.iter().map(|h| (h.name.to_lowercase(), h.id)).collect();
         let back = read_month(&once, 2026, 9, &known);
-        let twice = write_month(2026, 9, &[gym], &back.logs, &journal);
+        let twice = write_month(2026, 9, &habits, &back.logs, &journal);
         assert_eq!(once, twice);
     }
 }

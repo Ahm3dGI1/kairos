@@ -65,10 +65,19 @@ pub fn agenda(state: State<'_, AppState>, query: AgendaQuery) -> CmdResult<Vec<G
 pub struct HabitRow {
     id: HabitId,
     name: String,
-    /// One entry per day of the month, in order.
+    /// "check", "duration" or "number:pages".
+    kind: String,
+    /// Whether the row takes a number rather than a tick.
+    numeric: bool,
+    /// One entry per day of the month, in order. Empty for a numeric row.
     done: Vec<bool>,
-    /// Days ticked this month, for the row total.
+    /// One entry per day for a numeric row, already formatted for the cell.
+    values: Vec<String>,
+    /// Days with something on them this month, for the row total.
     count: usize,
+    /// The mean of the days that recorded a number, formatted. A total would
+    /// be the wrong summary for a duration you are trying to hold steady.
+    average: Option<String>,
     streak: u32,
 }
 
@@ -93,9 +102,6 @@ pub struct HabitMonth {
     label: String,
     days: Vec<DayColumn>,
     habits: Vec<HabitRow>,
-    /// Hand-entered minutes per day, aligned with `days`.
-    screen: Vec<Option<u32>>,
-    sleep: Vec<Option<u32>>,
 }
 
 fn last_day_of_month(year: i32, month: u32) -> u32 {
@@ -157,13 +163,37 @@ pub fn habit_month(state: State<'_, AppState>, year: i32, month: u32) -> CmdResu
     let habit_rows = habits
         .into_iter()
         .map(|habit| {
-            let done: Vec<bool> = dates
+            let numeric = habit.kind.is_numeric();
+            let raw: Vec<Option<f64>> = dates
                 .iter()
-                .map(|date| by_date.get(date).is_some_and(|log| log.is_done(habit.id)))
+                .map(|date| by_date.get(date).and_then(|log| log.value(habit.id)))
                 .collect();
+
+            let done: Vec<bool> = if numeric {
+                Vec::new()
+            } else {
+                dates
+                    .iter()
+                    .map(|date| by_date.get(date).is_some_and(|log| log.is_done(habit.id)))
+                    .collect()
+            };
+            let values: Vec<String> = if numeric {
+                raw.iter().map(|v| v.map(|v| habit.kind.format(v)).unwrap_or_default()).collect()
+            } else {
+                Vec::new()
+            };
+
+            let recorded: Vec<f64> = raw.iter().flatten().copied().collect();
+            let average = (!recorded.is_empty())
+                .then(|| habit.kind.format(recorded.iter().sum::<f64>() / recorded.len() as f64));
+
             HabitRow {
-                count: done.iter().filter(|d| **d).count(),
+                count: if numeric { recorded.len() } else { done.iter().filter(|d| **d).count() },
                 done,
+                values,
+                average,
+                numeric,
+                kind: habit.kind.label(),
                 streak: streaks.get(&habit.id).copied().unwrap_or(0),
                 id: habit.id,
                 name: habit.name,
@@ -171,17 +201,12 @@ pub fn habit_month(state: State<'_, AppState>, year: i32, month: u32) -> CmdResu
         })
         .collect();
 
-    let screen = dates.iter().map(|d| by_date.get(d).and_then(|l| l.screen_minutes)).collect();
-    let sleep = dates.iter().map(|d| by_date.get(d).and_then(|l| l.sleep_minutes)).collect();
-
     Ok(HabitMonth {
         label: format!("{} {year}", MONTH_NAMES[(month.max(1) - 1) as usize % 12]),
         year,
         month,
         days,
         habits: habit_rows,
-        screen,
-        sleep,
     })
 }
 
@@ -200,12 +225,42 @@ pub fn toggle_habit(
 }
 
 #[tauri::command]
-pub fn add_habit(app: AppHandle, state: State<'_, AppState>, name: String) -> CmdResult<()> {
+pub fn add_habit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+    kind: Option<String>,
+) -> CmdResult<()> {
     if name.trim().is_empty() {
         return Ok(());
     }
     let today = today();
-    with_store(&app, &state, |store| store.add_habit(&name, today).map(|_| ()))
+    with_store(&app, &state, |store| {
+        let mut habit = store.add_habit(&name, today)?;
+        if let Some(kind) = kind {
+            habit.kind = daily::HabitKind::parse(&kind);
+            store.save_habit(&habit)?;
+        }
+        Ok(())
+    })
+}
+
+/// Just the habits, for anywhere that needs to name one — the detail pane's
+/// link picker, mainly.
+#[derive(Serialize)]
+pub struct HabitBrief {
+    id: HabitId,
+    name: String,
+    kind: String,
+}
+
+#[tauri::command]
+pub fn habits(state: State<'_, AppState>) -> CmdResult<Vec<HabitBrief>> {
+    let habits = read_store(&state, |store| store.habits(false))?;
+    Ok(habits
+        .into_iter()
+        .map(|h| HabitBrief { id: h.id, name: h.name, kind: h.kind.label() })
+        .collect())
 }
 
 #[tauri::command]
@@ -235,23 +290,44 @@ pub fn delete_habit(app: AppHandle, state: State<'_, AppState>, id: HabitId) -> 
 /// Sets one of the hand-entered numbers for a day, reading the loose shapes a
 /// person types ("7h30", "7.5h", "450"). An empty value clears it.
 #[tauri::command]
-pub fn set_day_metric(
+pub fn set_habit_value(
     app: AppHandle,
     state: State<'_, AppState>,
     date: NaiveDate,
-    field: String,
+    id: HabitId,
     value: String,
 ) -> CmdResult<()> {
+    if date > today() {
+        return Ok(());
+    }
     with_store(&app, &state, |store| {
+        let Some(habit) = store.habits(true)?.into_iter().find(|h| h.id == id) else {
+            return Ok(());
+        };
         let mut log = store.day_log(date)?;
-        let minutes = daily::parse_duration(&value);
-        match field.as_str() {
-            "screen" => log.screen_minutes = minutes,
-            "sleep" => log.sleep_minutes = minutes,
-            // An unknown field is a frontend bug, not a reason to lose the day.
-            _ => return Ok(()),
-        }
+        // An emptied cell is a day that recorded nothing, not a day that
+        // recorded zero — the difference between "did not measure" and "none".
+        log.set_value(id, habit.kind.parse_value(&value));
         store.save_day_log(&log)
+    })
+}
+
+/// Changes what a habit records. Existing entries are left alone: a number
+/// read as a duration is still the same number, and losing a month of history
+/// to a mistaken tap on a dropdown would be worse than an odd-looking cell.
+#[tauri::command]
+pub fn set_habit_kind(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: HabitId,
+    kind: String,
+) -> CmdResult<()> {
+    with_store(&app, &state, |store| {
+        let Some(mut habit) = store.habits(true)?.into_iter().find(|h| h.id == id) else {
+            return Ok(());
+        };
+        habit.kind = daily::HabitKind::parse(&kind);
+        store.save_habit(&habit)
     })
 }
 

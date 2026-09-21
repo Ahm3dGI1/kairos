@@ -5,7 +5,14 @@
 // mono footer keyed like the rest of the app, so the pane teaches its own
 // shortcuts instead of hiding them behind icons.
 
-import { clear, el, parseDate, shortTime, toIso } from './shared.js';
+import { call, clear, el, parseDate, shortTime, toIso } from './shared.js';
+
+/** The habits a task can be linked to. Refreshed whenever the list reloads. */
+let habitList = [];
+
+export async function refreshHabits() {
+  habitList = (await call('habits', undefined, 'Habits')) ?? [];
+}
 
 const PRIORITIES = [
   ['high', '!p1'],
@@ -306,6 +313,48 @@ export function renderDetail(root, task, { todayDate, actions }) {
     }),
   );
   chips.appendChild(repeatChip);
+
+  // Tracking a task as a habit. "Gym" is both a thing to do on Monday and a
+  // thing to have a run of; linking them means ticking one, not two.
+  const linked = habitList.find((h) => h.id === task.habit);
+  const habitChip = el('button', {
+    class: `chip ${linked ? 'on' : ''}`,
+    type: 'button',
+    text: linked ? `habit: ${linked.name}` : 'not a habit',
+    title: 'Completing this task also ticks the habit for that day',
+  });
+  habitChip.addEventListener('click', () =>
+    openPop(root, habitChip, (pop, close) => {
+      const choose = (id) => {
+        actions.edit({ habit: id });
+        close();
+      };
+      pop.appendChild(
+        el('button', {
+          type: 'button',
+          class: `repeat-option ${linked ? '' : 'on'}`,
+          text: 'not a habit',
+          onclick: () => choose(null),
+        }),
+      );
+      for (const habit of habitList) {
+        pop.appendChild(
+          el('button', {
+            type: 'button',
+            class: `repeat-option ${habit.id === task.habit ? 'on' : ''}`,
+            text: habit.name,
+            onclick: () => choose(habit.id),
+          }),
+        );
+      }
+      if (!habitList.length) {
+        pop.appendChild(
+          el('p', { class: 'pop-note', text: 'no habits yet — add one on the Habits page' }),
+        );
+      }
+    }),
+  );
+  chips.appendChild(habitChip);
 
   if (task.project) chips.appendChild(el('span', { class: 'chip', text: `@${task.project}` }));
   for (const tag of task.tags ?? []) {

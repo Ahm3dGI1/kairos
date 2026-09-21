@@ -10,7 +10,7 @@
 //! automatically would mean a background agent or a vendor API, and the project
 //! is offline-first and self-hosted (spec §3).
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -18,11 +18,107 @@ use uuid::Uuid;
 
 pub type HabitId = Uuid;
 
+/// What a day's entry for a habit looks like.
+///
+/// Not every habit is a yes or a no. "Did I read" is a tick; "how many pages"
+/// and "how long did I sleep" are numbers, and flattening them to a tick
+/// throws away the only part worth looking back at. Sleep and screen time
+/// were once two hard-coded columns for exactly this reason — they are now
+/// just the first two habits of the kinds that already existed in spirit.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum HabitKind {
+    /// Done or not.
+    #[default]
+    Check,
+    /// A quantity, in whatever the user counts.
+    Number {
+        /// "pages", "km", "glasses" — shown after the value, never parsed.
+        #[serde(default)]
+        unit: String,
+    },
+    /// A length of time, entered and shown as "7h 30m".
+    Duration,
+}
+
+impl HabitKind {
+    /// Whether a day's entry is a number rather than a tick.
+    pub fn is_numeric(&self) -> bool {
+        !matches!(self, HabitKind::Check)
+    }
+
+    /// The stored form: "check", "duration", or "number:pages".
+    pub fn label(&self) -> String {
+        match self {
+            HabitKind::Check => "check".into(),
+            HabitKind::Duration => "duration".into(),
+            HabitKind::Number { unit } if unit.is_empty() => "number".into(),
+            HabitKind::Number { unit } => format!("number:{unit}"),
+        }
+    }
+
+    pub fn parse(text: &str) -> Self {
+        match text.split_once(':') {
+            Some(("number", unit)) => HabitKind::Number { unit: unit.trim().to_string() },
+            _ => match text.trim() {
+                "duration" => HabitKind::Duration,
+                "number" => HabitKind::Number { unit: String::new() },
+                _ => HabitKind::Check,
+            },
+        }
+    }
+
+    /// A value as it should read on the page.
+    pub fn format(&self, value: f64) -> String {
+        match self {
+            HabitKind::Duration => format_duration(value.max(0.0).round() as u32),
+            HabitKind::Number { unit } => {
+                let number = if (value - value.round()).abs() < f64::EPSILON {
+                    format!("{}", value.round() as i64)
+                } else {
+                    format!("{value:.1}")
+                };
+                if unit.is_empty() {
+                    number
+                } else {
+                    format!("{number} {unit}")
+                }
+            }
+            HabitKind::Check => String::new(),
+        }
+    }
+
+    /// Reads what the user typed into a cell.
+    pub fn parse_value(&self, text: &str) -> Option<f64> {
+        let text = text.trim();
+        if text.is_empty() {
+            return None;
+        }
+        match self {
+            HabitKind::Duration => parse_duration(text).map(f64::from),
+            _ => {
+                // The unit is written after the number in the vault, so that a
+                // column reads as "42 pages" rather than a bare 42. Anything
+                // past the number is that unit, or a typo; either way the
+                // number is what was meant.
+                let number: String = text
+                    .replace(',', ".")
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+                    .collect();
+                number.parse::<f64>().ok().filter(|v| v.is_finite())
+            }
+        }
+    }
+}
+
 /// Something you want to do most days.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Habit {
     pub id: HabitId,
     pub name: String,
+    #[serde(default)]
+    pub kind: HabitKind,
     pub created_at: NaiveDate,
     /// Retired habits stop appearing without losing their history.
     pub archived: bool,
@@ -32,32 +128,33 @@ pub struct Habit {
 
 impl Habit {
     pub fn new(name: impl Into<String>, created_at: NaiveDate, position: i64) -> Self {
-        Self { id: Uuid::new_v4(), name: name.into(), created_at, archived: false, position }
+        Self {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            kind: HabitKind::Check,
+            created_at,
+            archived: false,
+            position,
+        }
     }
 }
 
 /// Everything recorded about one day.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DayLog {
     pub date: NaiveDate,
     pub journal: String,
-    /// Minutes in front of a screen, as entered.
-    pub screen_minutes: Option<u32>,
-    /// Minutes slept, as entered.
-    pub sleep_minutes: Option<u32>,
     /// The habits ticked on this day.
     pub habits_done: Vec<HabitId>,
+    /// What the numeric habits recorded. Ordered by id so the day serialises
+    /// the same way twice, which is what keeps the vault from churning.
+    #[serde(default)]
+    pub values: BTreeMap<HabitId, f64>,
 }
 
 impl DayLog {
     pub fn new(date: NaiveDate) -> Self {
-        Self {
-            date,
-            journal: String::new(),
-            screen_minutes: None,
-            sleep_minutes: None,
-            habits_done: Vec::new(),
-        }
+        Self { date, journal: String::new(), habits_done: Vec::new(), values: BTreeMap::new() }
     }
 
     pub fn is_done(&self, habit: HabitId) -> bool {
@@ -81,10 +178,29 @@ impl DayLog {
     /// Whether this day holds nothing worth storing — so an opened-and-abandoned
     /// day does not litter the database with blank rows.
     pub fn is_empty(&self) -> bool {
-        self.journal.trim().is_empty()
-            && self.screen_minutes.is_none()
-            && self.sleep_minutes.is_none()
-            && self.habits_done.is_empty()
+        self.journal.trim().is_empty() && self.habits_done.is_empty() && self.values.is_empty()
+    }
+
+    pub fn value(&self, habit: HabitId) -> Option<f64> {
+        self.values.get(&habit).copied()
+    }
+
+    /// Records a numeric habit's entry, or clears it when `value` is `None`.
+    /// An emptied cell is a day with nothing recorded, not a day with a zero.
+    pub fn set_value(&mut self, habit: HabitId, value: Option<f64>) {
+        match value {
+            Some(value) => {
+                self.values.insert(habit, value);
+            }
+            None => {
+                self.values.remove(&habit);
+            }
+        }
+    }
+
+    /// Whether this day has anything at all for a habit, of either kind.
+    pub fn has(&self, habit: HabitId) -> bool {
+        self.is_done(habit) || self.values.contains_key(&habit)
     }
 }
 

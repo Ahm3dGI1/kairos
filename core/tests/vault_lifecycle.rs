@@ -282,3 +282,61 @@ fn an_outside_edit_is_not_an_undo_step() {
     assert_eq!(store.all().unwrap().len(), 2, "the outside edit landed");
     assert!(store.can_undo().unwrap(), "and the app's own history is still there");
 }
+
+/// A habit and a task for the same thing: completing the task records the
+/// habit, so "gym five days a week" is one act rather than two.
+#[test]
+fn completing_a_linked_task_ticks_its_habit() {
+    let mut store = Store::in_memory().unwrap();
+    let gym = store.add_habit("Gym", today()).unwrap();
+
+    let mut task = Task::new("Gym", today());
+    task.due = Some(today());
+    task.recurrence = Some(Recurrence::WEEKDAYS);
+    task.habit = Some(gym.id);
+    store.save(&task).unwrap();
+
+    assert!(!store.day_log(today()).unwrap().is_done(gym.id));
+    store.complete(task.id, today()).unwrap();
+    assert!(store.day_log(today()).unwrap().is_done(gym.id), "the habit was recorded");
+
+    // Completing again on the same day is one day done, not a day undone.
+    store.complete(task.id, today()).unwrap();
+    assert!(store.day_log(today()).unwrap().is_done(gym.id));
+}
+
+/// An unlinked task leaves the habits alone.
+#[test]
+fn completing_an_ordinary_task_records_no_habit() {
+    let mut store = Store::in_memory().unwrap();
+    let gym = store.add_habit("Gym", today()).unwrap();
+
+    let mut task = Task::new("Something else", today());
+    task.due = Some(today());
+    store.save(&task).unwrap();
+    store.complete(task.id, today()).unwrap();
+
+    assert!(!store.day_log(today()).unwrap().is_done(gym.id));
+}
+
+/// The link survives the vault, which is what makes it real data rather than
+/// a detail of the database.
+#[test]
+fn a_link_survives_a_trip_through_the_files() {
+    let temp = Temp::new("link");
+    let vault = temp.vault();
+    let mut store = Store::in_memory().unwrap();
+
+    let gym = store.add_habit("Gym", today()).unwrap();
+    let mut task = Task::new("Gym", today());
+    task.due = Some(today());
+    task.habit = Some(gym.id);
+    store.save(&task).unwrap();
+
+    vault.write(&store.snapshot().unwrap()).unwrap();
+    assert!(temp.read("tasks/inbox.md").contains("habit:Gym"));
+
+    store.restore(&vault.read(today()).unwrap()).unwrap();
+    let back = store.get(task.id).unwrap().unwrap();
+    assert_eq!(back.habit, Some(gym.id));
+}

@@ -172,17 +172,45 @@ fn habits_and_a_day_log_round_trip() {
 }
 
 #[test]
-fn the_journal_and_the_two_numbers_persist() {
+fn the_journal_and_a_days_numbers_persist() {
     let mut store = Store::in_memory().unwrap();
+
+    let mut sleep = store.add_habit("Sleep", today()).unwrap();
+    sleep.kind = kairos_core::daily::HabitKind::Duration;
+    store.save_habit(&sleep).unwrap();
+    let mut pages = store.add_habit("Pages", today()).unwrap();
+    pages.kind = kairos_core::daily::HabitKind::Number { unit: "pages".into() };
+    store.save_habit(&pages).unwrap();
 
     let mut log = DayLog::new(today());
     log.journal = "Slept badly, shipped the parser anyway.".into();
-    log.screen_minutes = Some(415);
-    log.sleep_minutes = Some(390);
+    log.set_value(sleep.id, Some(390.0));
+    log.set_value(pages.id, Some(12.0));
     store.save_day_log(&log).unwrap();
 
     let loaded = store.day_log(today()).unwrap();
     assert_eq!(loaded, log);
+}
+
+/// An emptied cell is a day with nothing recorded, not a day with a zero —
+/// which is the difference between "I did not measure" and "I slept none".
+#[test]
+fn clearing_a_number_removes_it_rather_than_zeroing_it() {
+    let mut store = Store::in_memory().unwrap();
+    let habit = store.add_habit("Pages", today()).unwrap();
+
+    let mut log = DayLog::new(today());
+    log.set_value(habit.id, Some(12.0));
+    store.save_day_log(&log).unwrap();
+    assert_eq!(store.day_log(today()).unwrap().value(habit.id), Some(12.0));
+
+    let mut log = store.day_log(today()).unwrap();
+    log.set_value(habit.id, None);
+    store.save_day_log(&log).unwrap();
+
+    let loaded = store.day_log(today()).unwrap();
+    assert_eq!(loaded.value(habit.id), None);
+    assert!(loaded.is_empty(), "a day with nothing on it keeps no row");
 }
 
 #[test]

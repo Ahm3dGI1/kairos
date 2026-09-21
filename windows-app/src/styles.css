@@ -1938,3 +1938,47 @@ select {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
+
+/* ---- numeric habit rows ----
+   A cell is 19px, which cannot hold "7h 30m". So a number is shown as an
+   intensity against the month's largest, read exactly on hover, and typed
+   into an input floated over the cell — the only place wide enough for one. */
+
+.habit-days {
+  position: relative;
+}
+
+.pop .day-key,
+.day.num {
+  font-family: var(--mono);
+}
+
+.day.num {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.day.num.blank {
+  background: transparent;
+  border: 1px dashed var(--line);
+}
+
+.day.num.ahead {
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.cell-input {
+  position: absolute;
+  top: -3px;
+  width: 76px;
+  z-index: 5;
+  padding: 3px 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-max);
+  background: var(--raised);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  outline: none;
+}

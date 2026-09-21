@@ -41,16 +41,22 @@ const SUBTASK_NS: Uuid = Uuid::from_bytes([
 ]);
 
 /// Renders one project's tasks as a Markdown document.
-pub fn write_file(project: Option<&str>, tasks: &[Task]) -> String {
+pub fn write_file(project: Option<&str>, tasks: &[Task], habits: &HabitNames) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {}\n\n", project.unwrap_or("Inbox")));
     for task in tasks {
-        write_task(task, &mut out);
+        write_task(task, task.habit.and_then(|id| habits.get(&id)).map(String::as_str), &mut out);
     }
     out
 }
 
-fn write_task(task: &Task, out: &mut String) {
+/// Habit id to display name, for writing a link out as something readable.
+pub type HabitNames = std::collections::HashMap<uuid::Uuid, String>;
+
+/// Habit name, lowercased, to id — for reading one back.
+pub type HabitIds = std::collections::HashMap<String, uuid::Uuid>;
+
+fn write_task(task: &Task, habit_name: Option<&str>, out: &mut String) {
     out.push_str(if task.is_done() { "- [x] " } else { "- [ ] " });
     out.push_str(&one_line(&task.title));
 
@@ -79,6 +85,9 @@ fn write_task(task: &Task, out: &mut String) {
     }
     if task.checklist == Checklist::OnePerOccurrence {
         out.push_str(" list:backlog");
+    }
+    if let Some(name) = habit_name {
+        out.push_str(&format!(" habit:{}", quote(name)));
     }
     for tag in &task.tags {
         out.push_str(&format!(" #{tag}"));
@@ -109,7 +118,7 @@ fn write_task(task: &Task, out: &mut String) {
 ///
 /// `today` dates anything the file did not say, and anchors the
 /// natural-language parse of hand-written lines.
-pub fn read_file(text: &str, today: NaiveDate) -> (Option<String>, Vec<Task>) {
+pub fn read_file(text: &str, today: NaiveDate, habits: &HabitIds) -> (Option<String>, Vec<Task>) {
     let mut project = None;
     let mut tasks: Vec<Task> = Vec::new();
 
@@ -142,7 +151,7 @@ pub fn read_file(text: &str, today: NaiveDate) -> (Option<String>, Vec<Task>) {
                 }
             }
             let (done, line) = body;
-            if let Some(task) = read_task(line, done, today) {
+            if let Some(task) = read_task(line, done, today, habits) {
                 tasks.push(task);
             }
             continue;
@@ -173,7 +182,7 @@ fn checkbox(line: &str) -> Option<(bool, &str)> {
     None
 }
 
-fn read_task(line: &str, done: bool, today: NaiveDate) -> Option<Task> {
+fn read_task(line: &str, done: bool, today: NaiveDate, habits: &HabitIds) -> Option<Task> {
     let tokens = tokenize(line);
     // Walk back from the end while tokens are recognizable metadata, never
     // consuming the whole line — a task whose title *is* "#fitness" should keep
@@ -203,7 +212,7 @@ fn read_task(line: &str, done: bool, today: NaiveDate) -> Option<Task> {
     }
 
     for token in meta {
-        apply(&mut task, token);
+        apply(&mut task, token, habits);
     }
 
     // A completed one-off must carry a date; a file that says `[x]` with no
@@ -228,11 +237,22 @@ fn is_meta(token: &str) -> bool {
     }
     matches!(
         token.split_once(':').map(|(key, _)| key),
-        Some("due" | "at" | "repeat" | "every" | "skip" | "moved" | "done" | "created" | "list")
+        Some(
+            "due"
+                | "at"
+                | "repeat"
+                | "every"
+                | "skip"
+                | "moved"
+                | "done"
+                | "created"
+                | "list"
+                | "habit"
+        )
     )
 }
 
-fn apply(task: &mut Task, token: &str) {
+fn apply(task: &mut Task, token: &str, habits: &HabitIds) {
     if let Some(id) = token.strip_prefix('^') {
         if let Ok(id) = Uuid::parse_str(id) {
             task.id = id;
@@ -282,6 +302,10 @@ fn apply(task: &mut Task, token: &str) {
                 _ => Checklist::All,
             }
         }
+        // An unknown name links to nothing rather than inventing a habit: a
+        // habit is created in the habit files, and a typo here should be
+        // visible as a link that did not take, not as a second habit.
+        "habit" => task.habit = habits.get(&value.to_lowercase()).copied(),
         _ => {}
     }
 }
@@ -403,8 +427,8 @@ mod tests {
     }
 
     fn roundtrip(task: &Task) -> Task {
-        let text = write_file(Some("Health"), std::slice::from_ref(task));
-        let (_, mut tasks) = read_file(&text, today());
+        let text = write_file(Some("Health"), std::slice::from_ref(task), &HabitNames::new());
+        let (_, mut tasks) = read_file(&text, today(), &HabitIds::new());
         assert_eq!(tasks.len(), 1, "wrote:\n{text}");
         tasks.remove(0)
     }
@@ -466,7 +490,11 @@ mod tests {
     /// editor and get the task the capture bar would have made.
     #[test]
     fn a_hand_written_line_is_parsed_as_natural_language() {
-        let (_, tasks) = read_file("# Inbox\n\n- [ ] gym every day 5pm #health !p1\n", today());
+        let (_, tasks) = read_file(
+            "# Inbox\n\n- [ ] gym every day 5pm #health !p1\n",
+            today(),
+            &HabitIds::new(),
+        );
         assert_eq!(tasks.len(), 1);
         let task = &tasks[0];
         assert_eq!(task.title, "gym");
@@ -478,8 +506,11 @@ mod tests {
 
     #[test]
     fn a_hand_written_line_may_also_use_explicit_fields() {
-        let (_, tasks) =
-            read_file("- [ ] Dentist due:2026-10-01 at:09:30 repeat:\"every 3 months\"\n", today());
+        let (_, tasks) = read_file(
+            "- [ ] Dentist due:2026-10-01 at:09:30 repeat:\"every 3 months\"\n",
+            today(),
+            &HabitIds::new(),
+        );
         let task = &tasks[0];
         assert_eq!(task.title, "Dentist");
         assert_eq!(task.due, NaiveDate::from_ymd_opt(2026, 10, 1));
@@ -491,7 +522,7 @@ mod tests {
     /// bare "day" before "every day".
     #[test]
     fn every_is_accepted_as_a_synonym() {
-        let (_, tasks) = read_file("- [ ] Walk every:day\n", today());
+        let (_, tasks) = read_file("- [ ] Walk every:day\n", today(), &HabitIds::new());
         assert_eq!(tasks[0].recurrence, Some(Recurrence::Daily));
     }
 
@@ -501,7 +532,7 @@ mod tests {
         // by the app: the word stays in the title and the date stands.
         let id = Uuid::new_v4();
         let text = format!("- [ ] call mom tomorrow due:2026-12-01 created:2026-09-20 ^{id}\n");
-        let (_, tasks) = read_file(&text, today());
+        let (_, tasks) = read_file(&text, today(), &HabitIds::new());
         assert_eq!(tasks[0].title, "call mom tomorrow");
         assert_eq!(tasks[0].due, NaiveDate::from_ymd_opt(2026, 12, 1));
     }
@@ -510,7 +541,7 @@ mod tests {
     fn metadata_in_the_middle_of_a_title_stays_in_the_title() {
         let id = Uuid::new_v4();
         let text = format!("- [ ] read #5 of the series !p1 ^{id}\n");
-        let (_, tasks) = read_file(&text, today());
+        let (_, tasks) = read_file(&text, today(), &HabitIds::new());
         assert_eq!(tasks[0].title, "read #5 of the series");
         assert_eq!(tasks[0].priority, Priority::High);
     }
@@ -526,10 +557,47 @@ mod tests {
 
     #[test]
     fn the_heading_names_the_project_and_inbox_means_none() {
-        let (project, _) = read_file("# Home Chores\n\n- [ ] sweep\n", today());
+        let (project, _) = read_file("# Home Chores\n\n- [ ] sweep\n", today(), &HabitIds::new());
         assert_eq!(project.as_deref(), Some("Home Chores"));
-        let (project, _) = read_file("# Inbox\n\n- [ ] sweep\n", today());
+        let (project, _) = read_file("# Inbox\n\n- [ ] sweep\n", today(), &HabitIds::new());
         assert_eq!(project, None);
+    }
+
+    /// A link is written by name, because a uuid in a task line would be
+    /// unreadable and the habit files already key by name.
+    #[test]
+    fn a_habit_link_round_trips_by_name() {
+        let habit = uuid::Uuid::new_v4();
+        let names = HabitNames::from([(habit, "Gym time".to_string())]);
+        let ids = HabitIds::from([("gym time".to_string(), habit)]);
+
+        let mut task = Task::new("Gym", today());
+        task.habit = Some(habit);
+        let text = write_file(Some("Health"), std::slice::from_ref(&task), &names);
+        assert!(
+            text.contains(r#"habit:"Gym time""#),
+            "wrote:
+{text}"
+        );
+
+        let (_, back) = read_file(&text, today(), &ids);
+        assert_eq!(back[0].habit, Some(habit));
+    }
+
+    /// A name nothing knows links to nothing. Inventing a habit here would
+    /// hide a typo as a second habit instead of showing it as a link that did
+    /// not take.
+    #[test]
+    fn an_unknown_habit_name_links_to_nothing() {
+        let (_, back) = read_file(
+            "- [ ] Gym habit:Nonexistent
+",
+            today(),
+            &HabitIds::new(),
+        );
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0].title, "Gym");
+        assert_eq!(back[0].habit, None);
     }
 
     #[test]
@@ -543,7 +611,7 @@ mod tests {
     #[test]
     fn a_file_with_junk_in_it_still_reads() {
         let text = "# Inbox\n\nrandom prose nobody asked about\n\n- [ ] real task\n\n---\n";
-        let (_, tasks) = read_file(text, today());
+        let (_, tasks) = read_file(text, today(), &HabitIds::new());
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].title, "real task");
     }
@@ -553,9 +621,9 @@ mod tests {
         let mut task = Task::new("Gym", today());
         task.due = Some(today());
         task.add_tag("health");
-        let once = write_file(Some("Health"), &[task.clone()]);
-        let (_, tasks) = read_file(&once, today());
-        let twice = write_file(Some("Health"), &tasks);
+        let once = write_file(Some("Health"), &[task.clone()], &HabitNames::new());
+        let (_, tasks) = read_file(&once, today(), &HabitIds::new());
+        let twice = write_file(Some("Health"), &tasks, &HabitNames::new());
         assert_eq!(once, twice);
     }
 }

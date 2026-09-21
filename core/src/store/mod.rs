@@ -246,6 +246,76 @@ impl Store {
                  PRAGMA user_version = 6;",
             )?;
         }
+
+        // v7: a habit can be a number rather than a tick, and the two
+        // hand-entered numbers stop being special. Screen time and sleep were
+        // always habits of a kind the model could not yet express; they become
+        // ordinary ones here, which is what lets any other number join them.
+        if version < 7 {
+            self.conn.execute_batch(
+                "ALTER TABLE habits ADD COLUMN kind TEXT NOT NULL DEFAULT 'check';
+                 ALTER TABLE day_logs ADD COLUMN numbers TEXT NOT NULL DEFAULT '{}';
+                 ALTER TABLE tasks ADD COLUMN habit TEXT;
+                 PRAGMA user_version = 7;",
+            )?;
+            self.lift_metrics_into_habits()?;
+        }
+        Ok(())
+    }
+
+    /// Turns the old `screen_minutes` and `sleep_minutes` columns into two
+    /// ordinary duration habits, carrying every day's number across.
+    ///
+    /// Only creates a habit that some day actually used: a database that never
+    /// recorded sleep should not grow a Sleep row for it.
+    fn lift_metrics_into_habits(&self) -> Result<()> {
+        let mut stmt = self.conn.prepare(
+            "SELECT date, screen_minutes, sleep_minutes FROM day_logs
+             WHERE screen_minutes IS NOT NULL OR sleep_minutes IS NOT NULL",
+        )?;
+        let rows: Vec<(String, Option<f64>, Option<f64>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        drop(stmt);
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        let mut position: i64 =
+            self.conn.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM habits", [], |r| {
+                r.get(0)
+            })?;
+        let mut make = |name: &str| -> Result<HabitId> {
+            let id = uuid::Uuid::new_v4();
+            self.conn.execute(
+                "INSERT INTO habits (id, name, created_at, archived, position, kind)
+                 VALUES (?1, ?2, ?3, 0, ?4, 'duration')",
+                params![
+                    id.to_string(),
+                    name,
+                    chrono::Local::now().date_naive().format(DATE_FORMAT).to_string(),
+                    position
+                ],
+            )?;
+            position += 1;
+            Ok(id)
+        };
+        let screen = make("Screen")?;
+        let sleep = make("Sleep")?;
+
+        for (date, screen_minutes, sleep_minutes) in rows {
+            let mut values = serde_json::Map::new();
+            if let Some(minutes) = screen_minutes {
+                values.insert(screen.to_string(), minutes.into());
+            }
+            if let Some(minutes) = sleep_minutes {
+                values.insert(sleep.to_string(), minutes.into());
+            }
+            self.conn.execute(
+                "UPDATE day_logs SET numbers = ?2 WHERE date = ?1",
+                params![date, serde_json::Value::Object(values).to_string()],
+            )?;
+        }
         Ok(())
     }
 
@@ -453,24 +523,33 @@ impl Store {
 
     /// Carries anything already written in the old per-day journals across into
     /// the month pages, so upgrading never silently drops what someone wrote.
+    /// Runs during the v3 migration, so it reads and writes the columns that
+    /// exist *at v3* rather than going through [`Store::all_day_logs`].
+    ///
+    /// A migration that calls the ordinary accessors is a migration that
+    /// breaks the next time the schema moves: those queries describe today's
+    /// table, and this one is running against an older one.
     fn fold_day_journals_into_months(&self) -> Result<()> {
-        for log in self.all_day_logs()? {
-            if log.journal.trim().is_empty() {
+        let mut stmt = self.conn.prepare("SELECT date, journal FROM day_logs")?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        drop(stmt);
+
+        for (date, journal) in rows {
+            if journal.trim().is_empty() {
                 continue;
             }
-            let key = MonthJournal::key(log.date.year(), log.date.month());
-            let mut journal = self.read_month_journal(&key, log.date.year(), log.date.month())?;
+            let Ok(parsed) = NaiveDate::parse_from_str(&date, DATE_FORMAT) else { continue };
+            let key = MonthJournal::key(parsed.year(), parsed.month());
+            let mut month = self.read_month_journal(&key, parsed.year(), parsed.month())?;
 
-            let mut entry = JournalEntry::new(log.date.format("%A %-d").to_string());
-            entry.body = log.journal.clone();
-            journal.entries.push(entry);
-            self.write_month_journal(&journal)?;
+            let mut entry = JournalEntry::new(parsed.format("%A %-d").to_string());
+            entry.body = journal;
+            month.entries.push(entry);
+            self.write_month_journal(&month)?;
 
-            let mut cleared = log.clone();
-            cleared.journal.clear();
-            // Written directly: save_day_log would drop a row that is now empty,
-            // which is exactly right here.
-            self.write_day_log(&cleared)?;
+            self.conn.execute("UPDATE day_logs SET journal = '' WHERE date = ?1", params![date])?;
         }
         Ok(())
     }
@@ -490,12 +569,14 @@ impl Store {
         self.conn.execute(
             "INSERT INTO tasks
                  (id, title, notes, due, time, recurrence, exceptions,
-                  priority, tags, project, subtasks, completed_at, created_at, checklist)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                  priority, tags, project, subtasks, completed_at, created_at,
+                  checklist, habit)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT(id) DO UPDATE SET
                  title = ?2, notes = ?3, due = ?4, time = ?5, recurrence = ?6,
                  exceptions = ?7, priority = ?8, tags = ?9, project = ?10,
-                 subtasks = ?11, completed_at = ?12, created_at = ?13, checklist = ?14",
+                 subtasks = ?11, completed_at = ?12, created_at = ?13,
+                 checklist = ?14, habit = ?15",
             params![
                 r.id,
                 r.title,
@@ -511,6 +592,7 @@ impl Store {
                 r.completed_at,
                 r.created_at,
                 r.checklist,
+                r.habit,
             ],
         )?;
         Ok(())
@@ -552,6 +634,17 @@ impl Store {
         self.record_undo(UndoKind::Complete, id, Some(&task))?;
         recur::complete_occurrence(&mut task, today);
         self.write(&task)?;
+
+        // A task standing for a habit records the habit too. Ticking rather
+        // than toggling: completing the task twice in a day is one day done,
+        // not a day undone.
+        if let Some(habit) = task.habit {
+            let mut log = self.day_log(today)?;
+            if !log.is_done(habit) {
+                log.habits_done.push(habit);
+                self.save_day_log(&log)?;
+            }
+        }
         Ok(task)
     }
 
@@ -674,7 +767,7 @@ impl Store {
     /// Habits in display order. Archived ones are left out unless asked for.
     pub fn habits(&self, include_archived: bool) -> Result<Vec<Habit>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, created_at, archived, position FROM habits
+            "SELECT id, name, created_at, archived, position, kind FROM habits
              WHERE (?1 OR archived = 0)
              ORDER BY position, name COLLATE NOCASE",
         )?;
@@ -685,15 +778,17 @@ impl Store {
                 row.get::<_, String>(2)?,
                 row.get::<_, bool>(3)?,
                 row.get::<_, i64>(4)?,
+                row.get::<_, String>(5)?,
             ))
         })?;
 
         let mut habits = Vec::new();
         for row in rows {
-            let (id, name, created_at, archived, position) = row?;
+            let (id, name, created_at, archived, position, kind) = row?;
             habits.push(Habit {
                 id: uuid::Uuid::parse_str(&id).unwrap_or_else(|_| uuid::Uuid::new_v4()),
                 name,
+                kind: crate::daily::HabitKind::parse(&kind),
                 created_at: NaiveDate::parse_from_str(&created_at, DATE_FORMAT)
                     .unwrap_or_else(|_| chrono::Local::now().date_naive()),
                 archived,
@@ -716,16 +811,17 @@ impl Store {
 
     pub fn save_habit(&mut self, habit: &Habit) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO habits (id, name, created_at, archived, position)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO habits (id, name, created_at, archived, position, kind)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(id) DO UPDATE SET
-                 name = ?2, created_at = ?3, archived = ?4, position = ?5",
+                 name = ?2, created_at = ?3, archived = ?4, position = ?5, kind = ?6",
             params![
                 habit.id.to_string(),
                 habit.name,
                 habit.created_at.format(DATE_FORMAT).to_string(),
                 habit.archived,
                 habit.position,
+                habit.kind.label(),
             ],
         )?;
         Ok(())
@@ -754,29 +850,26 @@ impl Store {
         let found = self
             .conn
             .query_row(
-                "SELECT journal, screen_minutes, sleep_minutes, habits_done
-                 FROM day_logs WHERE date = ?1",
+                "SELECT journal, habits_done, numbers FROM day_logs WHERE date = ?1",
                 params![date.format(DATE_FORMAT).to_string()],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
-                        row.get::<_, Option<u32>>(1)?,
-                        row.get::<_, Option<u32>>(2)?,
-                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
                     ))
                 },
             )
             .optional()?;
 
-        let Some((journal, screen_minutes, sleep_minutes, habits_done)) = found else {
+        let Some((journal, habits_done, values)) = found else {
             return Ok(DayLog::new(date));
         };
         Ok(DayLog {
             date,
             journal,
-            screen_minutes,
-            sleep_minutes,
             habits_done: serde_json::from_str(&habits_done)?,
+            values: serde_json::from_str(&values)?,
         })
     }
 
@@ -792,16 +885,14 @@ impl Store {
             return Ok(());
         }
         self.conn.execute(
-            "INSERT INTO day_logs (date, journal, screen_minutes, sleep_minutes, habits_done)
-             VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT(date) DO UPDATE SET
-                 journal = ?2, screen_minutes = ?3, sleep_minutes = ?4, habits_done = ?5",
+            "INSERT INTO day_logs (date, journal, habits_done, numbers)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(date) DO UPDATE SET journal = ?2, habits_done = ?3, numbers = ?4",
             params![
                 date,
                 log.journal,
-                log.screen_minutes,
-                log.sleep_minutes,
                 serde_json::to_string(&log.habits_done)?,
+                serde_json::to_string(&log.values)?,
             ],
         )?;
         Ok(())
@@ -817,7 +908,7 @@ impl Store {
 
     pub fn day_logs_between(&self, from: NaiveDate, to: NaiveDate) -> Result<Vec<DayLog>> {
         let mut stmt = self.conn.prepare(
-            "SELECT date, journal, screen_minutes, sleep_minutes, habits_done
+            "SELECT date, journal, habits_done, numbers
              FROM day_logs WHERE date BETWEEN ?1 AND ?2 ORDER BY date",
         )?;
         let rows = stmt.query_map(
@@ -829,10 +920,9 @@ impl Store {
 
     /// Every recorded day, for the rare operation that has to touch all of them.
     pub(crate) fn all_day_logs(&self) -> Result<Vec<DayLog>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT date, journal, screen_minutes, sleep_minutes, habits_done
-             FROM day_logs ORDER BY date",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT date, journal, habits_done, numbers FROM day_logs ORDER BY date")?;
         let rows = stmt.query_map([], day_log_columns)?;
         collect_day_logs(rows)
     }
@@ -904,10 +994,10 @@ impl Store {
 }
 
 /// The raw columns of a `day_logs` row, in select order.
-type DayLogColumns = (String, String, Option<u32>, Option<u32>, String);
+type DayLogColumns = (String, String, String, String);
 
 fn day_log_columns(row: &rusqlite::Row<'_>) -> rusqlite::Result<DayLogColumns> {
-    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
 }
 
 fn collect_day_logs(
@@ -915,16 +1005,15 @@ fn collect_day_logs(
 ) -> Result<Vec<DayLog>> {
     let mut logs = Vec::new();
     for row in rows {
-        let (date, journal, screen_minutes, sleep_minutes, habits_done) = row?;
+        let (date, journal, habits_done, values) = row?;
         // A row whose date will not parse is unreadable rather than wrong;
         // skipping it keeps the rest of the history usable.
         let Ok(date) = NaiveDate::parse_from_str(&date, DATE_FORMAT) else { continue };
         logs.push(DayLog {
             date,
             journal,
-            screen_minutes,
-            sleep_minutes,
             habits_done: serde_json::from_str(&habits_done)?,
+            values: serde_json::from_str(&values)?,
         });
     }
     Ok(logs)

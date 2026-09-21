@@ -26,6 +26,7 @@ pub struct Row {
     pub completed_at: Option<String>,
     pub created_at: String,
     pub checklist: String,
+    pub habit: Option<String>,
 }
 
 /// Dates are stored ISO-8601 so they sort correctly as text in SQL.
@@ -49,6 +50,7 @@ impl Row {
             completed_at: task.completed_at.map(|d| d.format(DATE).to_string()),
             created_at: task.created_at.format(DATE).to_string(),
             checklist: task.checklist.label().to_string(),
+            habit: task.habit.map(|id| id.to_string()),
         })
     }
 
@@ -68,6 +70,7 @@ impl Row {
             completed_at: row.get("completed_at")?,
             created_at: row.get("created_at")?,
             checklist: row.get("checklist")?,
+            habit: row.get("habit")?,
         })
     }
 
@@ -94,6 +97,7 @@ impl Row {
             project: self.project,
             subtasks,
             checklist: Checklist::parse(&self.checklist),
+            habit: self.habit.as_deref().and_then(|id| Uuid::parse_str(id).ok()),
             completed_at: parse_date(self.completed_at.as_deref()),
             created_at: parse_date(Some(&self.created_at)).unwrap_or_else(today_fallback),
         })

@@ -5,7 +5,7 @@
 // that is always there and never a modal.
 
 import { createCapture } from './capture.js';
-import { renderDetail } from './detail.js';
+import { refreshHabits, renderDetail } from './detail.js';
 import { createHabits } from './habits.js';
 import { createSettings } from './settings.js';
 import { createWorkout } from './workout.js';
@@ -111,6 +111,10 @@ async function refresh() {
     renderStatus();
     return;
   }
+
+  // The detail pane's habit picker names them, and a habit added on the
+  // habits page has to show up there without a restart.
+  await refreshHabits();
 
   if (state.page === 'habits') {
     await habits.load();
