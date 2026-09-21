@@ -38,6 +38,27 @@ export function createSettings({ container, onChange }) {
       return select;
     }
 
+    if (setting.kind === 'number') {
+      const input = el('input', {
+        class: 'setting-path setting-number',
+        type: 'text',
+        inputmode: 'decimal',
+        value: setting.value === 0 ? '' : String(setting.value),
+        placeholder: setting.placeholder,
+        spellcheck: 'false',
+      });
+      const commit = () => {
+        // An empty box is zero, which is how "not set yet" is stored.
+        const value = input.value.trim() === '' ? 0 : Number(input.value);
+        if (Number.isFinite(value) && value !== setting.value) set(setting.key, value);
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') input.blur();
+      });
+      return input;
+    }
+
     if (setting.kind === 'path') {
       const input = el('input', {
         class: 'setting-path',

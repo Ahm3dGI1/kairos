@@ -9,6 +9,7 @@
 
 mod commands;
 mod daily_commands;
+mod prayer_commands;
 mod reminders;
 mod settings_commands;
 mod shell;
@@ -94,6 +95,7 @@ fn main() {
             workout_commands::save_set,
             workout_commands::save_session_note,
             workout_commands::delete_session,
+            prayer_commands::prayer_day,
             settings_commands::settings,
             settings_commands::settings_values,
             settings_commands::set_setting,

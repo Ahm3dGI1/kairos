@@ -7,14 +7,20 @@
 import { createCapture } from './capture.js';
 import { refreshHabits, renderDetail } from './detail.js';
 import { createHabits } from './habits.js';
+import { createPrayer } from './prayer.js';
 import { createSettings } from './settings.js';
 import { createWorkout } from './workout.js';
 import { call, clear, el, listen, parseDate, toIso, today } from './shared.js';
 
-const PAGES = ['agenda', 'calendar', 'habits', 'workout', 'settings'];
+const PAGES = ['agenda', 'calendar', 'habits', 'workout', 'prayer', 'settings'];
 
 /** Pages a setting can switch off. Tasks and Settings are always reachable. */
-const OPTIONAL_PAGES = { calendar: 'calendar_page', habits: 'habits_page', workout: 'workout_page' };
+const OPTIONAL_PAGES = {
+  calendar: 'calendar_page',
+  habits: 'habits_page',
+  workout: 'workout_page',
+  prayer: 'prayer_page',
+};
 
 const state = {
   page: 'agenda',
@@ -42,7 +48,7 @@ for (const id of [
   'summary', 'detail', 'toast', 'capture', 'capture-hint', 'preview', 'quick-add',
   'highlight', 'page-agenda', 'page-calendar', 'page-habits', 'page-workout',
   'sticky-toggle', 'lists', 'routines', 'workout-page', 'workout-grid', 'workout-empty',
-  'page-settings', 'settings-page', 'settings',
+  'page-settings', 'settings-page', 'settings', 'page-prayer', 'prayer-page',
 ]) {
   dom[id] = document.getElementById(id);
 }
@@ -52,6 +58,15 @@ for (const id of [
 const settings = createSettings({
   container: dom.settings,
   onChange: loadSettings,
+});
+
+const prayer = createPrayer({
+  page: dom['prayer-page'],
+  onStatus: (label, method) => {
+    dom.here.textContent = label;
+    dom.count.textContent = method;
+    clear(dom['status-tools']);
+  },
 });
 
 const capture = createCapture({
@@ -112,6 +127,11 @@ async function refresh() {
     return;
   }
 
+  if (state.page === 'prayer') {
+    await prayer.load();
+    return;
+  }
+
   // The detail pane's habit picker names them, and a habit added on the
   // habits page has to show up there without a restart.
   await refreshHabits();
@@ -155,8 +175,8 @@ async function loadAgenda() {
 // ---------- the status line ----------
 
 function renderStatus() {
-  // Those two pages own their own line.
-  if (state.page === 'habits' || state.page === 'workout') return;
+  // These pages own their own line.
+  if (state.page === 'habits' || state.page === 'workout' || state.page === 'prayer') return;
 
   if (state.page === 'settings') {
     dom.here.textContent = TITLES.settings;
@@ -631,6 +651,7 @@ const HINTS = {
   calendar: 'H L month · T today · Enter opens',
   habits: 'H L month · Space toggles today',
   workout: 'S starts today · double-click renames',
+  prayer: 'H L day · T today',
   settings: 'every change saves itself',
 };
 
@@ -639,6 +660,7 @@ const TITLES = {
   calendar: 'Calendar',
   habits: 'Habits',
   workout: 'Workout',
+  prayer: 'Prayer',
   settings: 'Settings',
 };
 
@@ -657,7 +679,7 @@ function setPage(page) {
   dom['capture-hint'].textContent = HINTS[page];
   // The bar captures a task on two pages and a journal line on the third;
   // there is nothing to capture into on the workout book or in settings.
-  const noCapture = page === 'workout' || page === 'settings';
+  const noCapture = page === 'workout' || page === 'settings' || page === 'prayer';
   dom.capture.hidden = noCapture;
   dom.preview.hidden = noCapture;
   dom['quick-add'].placeholder =
@@ -723,6 +745,7 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     const delta = key === 'h' ? -1 : 1;
     if (state.page === 'calendar') stepMonth(delta);
+    else if (state.page === 'prayer') prayer.step(delta);
     else habits.step(delta);
     return;
   }
@@ -730,6 +753,11 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     state.month = null;
     renderCalendar();
+    return;
+  }
+  if (key === 't' && state.page === 'prayer') {
+    event.preventDefault();
+    prayer.today();
     return;
   }
 
@@ -801,6 +829,7 @@ document.addEventListener('keydown', (event) => {
     case '3':
     case '4':
     case '5':
+    case '6':
       event.preventDefault();
       setPage(PAGES[Number(key) - 1]);
       break;

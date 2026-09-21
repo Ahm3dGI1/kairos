@@ -112,10 +112,22 @@ every device is independent.
   and subtasks. Everything else stays folded away until asked for.
 - **Calendar** — a month grid with recurrence expanded, so a daily task appears
   on every day it actually falls on.
-- **Habits by the month** — habits down the side, days across the top, one tick
-  per cell, with screen time and sleep as their own numeric rows. Beside it, a
-  journal for the whole month: entries carry their own headings, so a day, a
-  week or a trip can each be one block.
+- **Habits by the month** — habits down the side, days across the top. A habit
+  is a tick, a duration, or a count with a unit; a numeric row keeps the same
+  grid and shows its value as an intensity, read exactly on hover and typed
+  into an input floated over the cell. Beside it, a journal for the whole
+  month: entries carry their own headings, so a day, a week or a trip can each
+  be one block.
+- **A task can be a habit.** "Gym" is both a thing to do five times a week and
+  a thing to have a run of; link them from the detail pane and completing the
+  task ticks the habit for that day.
+- **Prayer times** — the five prayers and sunrise for any day, with the next
+  one counted down. Nothing is fetched: a prayer time is a statement about
+  where the sun is, and that follows from the date and a pair of coordinates,
+  so the page is arithmetic and works with no network at all. Seven
+  calculation methods, both Asr conventions, and an honest blank where a
+  northern summer leaves the sun too high for Fajr or Isha to have an angle.
+  Off by default, because it needs coordinates first.
 - **Search** across titles, notes, subtasks, tags and projects.
 - **Undo and redo** for completions, deletions and edits, both backed by logs in
   the database, so they survive a restart. A fresh edit discards the redo stack,
@@ -173,7 +185,7 @@ The app is keyboard-first; the mouse is optional everywhere.
 | `Y` or `Ctrl+Shift+Z` | redo |
 | `S` | start today's session (Workout) |
 | `W` | toggle the sticky note |
-| `1`–`5` | Tasks, Calendar, Habits, Workout, Settings |
+| `1`–`6` | Tasks, Calendar, Habits, Workout, Prayer, Settings |
 | `Esc` | close the pane, clear the search, dismiss the overlay |
 | `Ctrl+Shift+Space` | quick-add overlay, from anywhere in Windows |
 
@@ -195,6 +207,7 @@ src/                 frontend — no build step
   capture.js           the capture field: parse pills and backspace-to-revert
   detail.js            the detail pane, its date and priority pickers
   habits.js            the habit month grid and the month journal
+  prayer.js            the prayer page
   settings.js          the settings page, rendered from the core's descriptions
   workout.js           routines, exercises and the session grid
   quick-add.html/.js   the hotkey overlay, sharing capture.js
