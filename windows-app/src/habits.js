@@ -1,12 +1,3 @@
-// The habit month, Direction B.
-//
-// A contribution grid: one row per habit, one square per day, filled when done
-// and hollow-red when missed. A month is the right window because a habit is a
-// question about consistency, and consistency is invisible one day at a time.
-//
-// Under it, the month's journal as a log — date on the left, the line on the
-// right — and a summary of how the month actually went.
-
 import { call, clear, el, parseDate, toIso } from './shared.js';
 
 export function createHabits({ rows, journal, summary, getToday, onMonth }) {
@@ -35,8 +26,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
     load();
   }
 
-  // ---------- the grid ----------
-
+  // -- the grid
   function renderGrid() {
     clear(rows);
 
@@ -394,8 +384,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
     load();
   }
 
-  // ---------- the journal ----------
-
+  // -- the journal
   async function renderJournal() {
     const [year, month] = shown;
     const page = await call('month_journal', { year, month }, 'Journal');

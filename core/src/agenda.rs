@@ -1,14 +1,3 @@
-//! The agenda: one list, grouped by when things are actually due.
-//!
-//! This replaces a row of view tabs. Switching between Today, Next 7 Days and
-//! Overdue made the user do the sorting — the answer to "what should I be doing"
-//! was spread across three clicks. One scrolling list, ordered from most urgent
-//! to least, answers it in one glance, and the buckets are headings rather than
-//! destinations.
-//!
-//! The bucketing lives here rather than in a client so the widget, the Windows
-//! list and a future TUI all agree on what "this week" means.
-
 use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 

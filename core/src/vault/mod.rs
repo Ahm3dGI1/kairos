@@ -1,26 +1,3 @@
-//! The vault: everything the app knows, as plain text files on disk.
-//!
-//! This is the system of record. The SQLite database is an index built from
-//! these files — delete it and the next launch rebuilds it; delete these and
-//! the data is gone. That inversion is the whole point: a todo list you cannot
-//! open in a text editor is a todo list you do not own, and the project's
-//! premise is that you do.
-//!
-//! ```text
-//! <vault>/
-//!   README.md            what the formats are — written for whoever opens the folder
-//!   settings.json        the switches (see [`crate::settings`])
-//!   tasks/inbox.md       one file per project, one Markdown checklist item per task
-//!   tasks/health.md
-//!   habits/habits.md     the habits themselves
-//!   habits/2026-09.md    a month of ticks, numbers and journal
-//!   workouts/push.md     a routine, its exercises, and every session
-//! ```
-//!
-//! Writing is **content-addressed**: a file is only touched when what it should
-//! contain differs from what it does. That keeps the file watcher from chasing
-//! its own tail, and keeps a vault under version control from churning.
-
 pub mod habits;
 pub mod tasks;
 pub mod workouts;
@@ -72,7 +49,7 @@ impl Vault {
         std::fs::create_dir_all(&self.root)?;
         changed |= write_if_changed(&self.root.join("README.md"), README)?;
 
-        // ---- tasks, one file per project
+        // -- tasks, one file per project
         let mut by_project: HashMap<Option<String>, Vec<crate::task::Task>> = HashMap::new();
         by_project.entry(None).or_default();
         for task in &snapshot.tasks {
@@ -97,7 +74,7 @@ impl Vault {
         }
         changed |= prune(&dir, &expected)?;
 
-        // ---- habits: the definitions, then a file per month
+        // -- habits: the definitions, then a file per month
         let dir = self.root.join(HABITS_DIR);
         std::fs::create_dir_all(&dir)?;
         let mut habits = snapshot.habits.clone();
@@ -139,7 +116,7 @@ impl Vault {
         }
         changed |= prune(&dir, &expected)?;
 
-        // ---- workouts, one file per routine
+        // -- workouts, one file per routine
         let dir = self.root.join(WORKOUTS_DIR);
         std::fs::create_dir_all(&dir)?;
         let mut expected = HashSet::new();

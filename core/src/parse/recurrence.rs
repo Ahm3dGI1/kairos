@@ -1,6 +1,3 @@
-//! Recurrence phrases. Extracted before dates, because "every monday" must
-//! claim the weekday before the date extractor reads it as a due date.
-
 use std::ops::Range;
 
 use super::token::{consume, word_at, Token};

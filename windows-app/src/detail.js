@@ -1,10 +1,3 @@
-// The detail pane, Direction B.
-//
-// A labelled column: what the task is at the top, then its facts as chips, then
-// subtasks and the note as two hairline-ruled blocks. The actions live in a
-// mono footer keyed like the rest of the app, so the pane teaches its own
-// shortcuts instead of hiding them behind icons.
-
 import { call, clear, el, parseDate, shortTime, toIso } from './shared.js';
 
 /** The habits a task can be linked to. Refreshed whenever the list reloads. */
@@ -224,8 +217,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
 
   const body = el('div', { class: 'detail-body' });
 
-  // ---- what it is ----
-
+  // -- what it is
   const done = Boolean(task.completed_at);
   const check = el('button', {
     class: `check ${done ? 'on' : ''}`.trim(),
@@ -251,8 +243,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
 
   body.appendChild(el('div', { class: 'detail-title-row' }, [check, title]));
 
-  // ---- its facts, as chips ----
-
+  // -- its facts, as chips
   const chips = el('div', { class: 'detail-chips' });
   const dueIso = task.due ?? null;
 
@@ -452,8 +443,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
   chips.appendChild(prioChip);
   body.appendChild(chips);
 
-  // ---- subtasks ----
-
+  // -- subtasks
   const subtasks = task.subtasks ?? [];
   const backlog = task.checklist === 'one-per-occurrence';
 
@@ -525,8 +515,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
   );
   body.appendChild(subBlock);
 
-  // ---- the note ----
-
+  // -- the note
   const note = el('textarea', { class: 'note-field', placeholder: 'a note…' });
   note.value = task.notes ?? '';
   const sizeNote = () => {
@@ -539,8 +528,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
 
   root.appendChild(body);
 
-  // ---- the footer: the actions that are not a field ----
-
+  // -- the footer: the actions that are not a field
   const foot = el('div', { class: 'detail-foot' }, [
     el('button', { type: 'button', text: 'D date', onclick: () => dateChip.click() }),
     el('button', { type: 'button', text: 'R repeat', onclick: () => repeatChip.click() }),

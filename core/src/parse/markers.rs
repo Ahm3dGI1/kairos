@@ -1,9 +1,3 @@
-//! Sigil markers: `#tag`, `@project`, `!priority`.
-//!
-//! These run before the date and time extractors. They are unambiguous — a
-//! sigil means exactly one thing — so claiming them first keeps a tag like
-//! `#friday` or a project like `@march` from being read as a date.
-
 use std::ops::Range;
 
 use super::token::{consume, Token};

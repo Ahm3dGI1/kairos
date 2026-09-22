@@ -1,13 +1,3 @@
-//! The local store: a SQLite database on the device.
-//!
-//! Local-first is the whole architecture, not a cache in front of a server, so
-//! this is the system of record. Sync, when it lands, reconciles against it —
-//! it never becomes the thing the app reads from directly.
-//!
-//! Every mutation records an undo entry, which is what makes deletions and
-//! completions safe to do quickly. The log lives in the database, so undo still
-//! works after a restart.
-
 mod row;
 mod snapshot;
 
@@ -319,8 +309,7 @@ impl Store {
         Ok(())
     }
 
-    // ---------- the workout book ----------
-
+    // -- the workout book
     pub fn routines(&self) -> Result<Vec<Routine>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, position FROM routines ORDER BY position, name COLLATE NOCASE",
@@ -772,8 +761,7 @@ impl Store {
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
-    // ---------- habits and the daily log ----------
-
+    // -- habits and the daily log
     /// Habits in display order. Archived ones are left out unless asked for.
     pub fn habits(&self, include_archived: bool) -> Result<Vec<Habit>> {
         let mut stmt = self.conn.prepare(
@@ -953,8 +941,7 @@ impl Store {
         Ok(days.into_iter().map(|(id, done)| (id, daily::streak(&done, today))).collect())
     }
 
-    // ---------- the month journal ----------
-
+    // -- the month journal
     /// A month's journal page, empty if nothing has been written in it.
     pub fn month_journal(&self, year: i32, month: u32) -> Result<MonthJournal> {
         self.read_month_journal(&MonthJournal::key(year, month), year, month)

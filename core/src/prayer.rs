@@ -1,29 +1,3 @@
-//! Prayer times, computed rather than fetched.
-//!
-//! There is no API here and there should not be one. A prayer time is a
-//! statement about where the sun is, and where the sun is follows from the
-//! date and a pair of coordinates — so the whole thing is arithmetic that
-//! works on a plane, in a tunnel, and in ten years when whichever service one
-//! might have called has been switched off. That is the same reason the rest
-//! of the app keeps its data in files.
-//!
-//! The method is the standard one. From the date we get the sun's declination
-//! and the equation of time; from those and the latitude we get the hour angle
-//! at which the sun sits at a given altitude, which is what each prayer is
-//! defined by:
-//!
-//! - **Dhuhr** is solar noon, corrected for longitude and the equation of time.
-//! - **Sunrise** and **Maghrib** are the sun at −0.833°, which allows for
-//!   refraction and for the disc's radius.
-//! - **Fajr** and **Isha** are the sun at a chosen angle below the horizon.
-//!   Which angle is the only thing the calculation methods disagree about.
-//! - **Asr** is when an object's shadow is its own length plus its noon
-//!   shadow, or twice that in the Hanafi reckoning.
-//!
-//! Everything is in degrees until the last step, because every formula in the
-//! literature is written that way and translating them to radians in the text
-//! is how sign errors get in.
-
 use chrono::{NaiveDate, NaiveTime, Timelike};
 use serde::{Deserialize, Serialize};
 
@@ -196,11 +170,20 @@ const SUNSET_ANGLE: f64 = 0.833;
 /// time would be worse than saying so.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Times {
+    /// The sun a chosen angle below the horizon before dawn. Which angle is
+    /// the only thing the calculation methods really disagree about.
     pub fajr: Option<NaiveTime>,
+    /// The sun at -0.833°, allowing for refraction and the disc's radius.
     pub sunrise: Option<NaiveTime>,
+    /// Solar noon, corrected for longitude and the equation of time.
     pub dhuhr: Option<NaiveTime>,
+    /// When an object's shadow is its own length past its noon shadow, or
+    /// twice that in the Hanafi reckoning.
     pub asr: Option<NaiveTime>,
+    /// Sunset, and for two methods a small angle past it.
     pub maghrib: Option<NaiveTime>,
+    /// The sun a chosen angle below the horizon after dusk, or a fixed wait
+    /// after Maghrib.
     pub isha: Option<NaiveTime>,
 }
 

@@ -1,6 +1,3 @@
-//! The task model. Every client speaks in these types; nothing here knows about
-//! UI, storage, or platform APIs.
-
 use chrono::{NaiveDate, NaiveTime, Weekday};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

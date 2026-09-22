@@ -1,5 +1,3 @@
-//! Redo, the one-per-occurrence checklist, and the workout book.
-
 use chrono::NaiveDate;
 use kairos_core::workout::{self, SetEntry};
 use kairos_core::{complete_item, Checklist, Recurrence, Store, Subtask, Task};

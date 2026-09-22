@@ -1,12 +1,3 @@
-//! The commands the frontend calls.
-//!
-//! Every one of these is a thin shell over `kairos-core`: parse a line, read a
-//! view, write a change, announce it. No task semantics live here — that is
-//! the core's job, and duplicating any of it would put the Windows app and a
-//! future Linux client out of step.
-//!
-//! This module holds what they share; each page's commands live beside it.
-
 pub mod daily;
 pub mod prayer;
 pub mod settings;

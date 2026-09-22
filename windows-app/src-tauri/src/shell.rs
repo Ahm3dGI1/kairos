@@ -1,10 +1,3 @@
-//! The Windows-specific surface: tray icon, global hotkey, and the two
-//! auxiliary windows.
-//!
-//! These are the things that make the app feel native rather than like a
-//! browser tab — spec §4, "Windows-specific UX". Nothing here knows what a task
-//! is; it only decides which window the user is looking at.
-
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{

@@ -1,32 +1,3 @@
-//! Habits, the day's two numbers, and the month's journal as Markdown.
-//!
-//! Split in two, because they change at different rates. `habits/habits.md`
-//! defines the habits once; `habits/2026-09.md` holds what actually happened
-//! that month:
-//!
-//! ```text
-//! # September 2026
-//!
-//! ## Ticks
-//!
-//! - Gym: 1 3 5 8 10 12
-//! - Read: 2 3 4
-//!
-//! ## Days
-//!
-//! | Day | Screen | Sleep |
-//! | --- | --- | --- |
-//! | 1 | 3h 20m | 7h 30m |
-//!
-//! ## Journal
-//!
-//! ### Week one
-//! Text under the heading.
-//! ```
-//!
-//! Ticks name their habit rather than carrying an id, so adding
-//! `- Swim: 5 6 7` to a month file is all it takes to start tracking one.
-
 use std::collections::HashMap;
 
 use chrono::{Datelike, NaiveDate};
@@ -51,8 +22,7 @@ const MONTHS: [&str; 12] = [
     "December",
 ];
 
-// ---------------------------------------------------------------- definitions
-
+// -- definitions
 /// Renders `habits/habits.md`.
 pub fn write_habits(habits: &[Habit]) -> String {
     let mut out = String::from("# Habits\n\n");
@@ -136,8 +106,7 @@ pub fn read_habits(text: &str, today: NaiveDate) -> Vec<Habit> {
     habits
 }
 
-// --------------------------------------------------------------------- months
-
+// -- months
 /// What one month file holds.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Month {

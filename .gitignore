@@ -3,3 +3,6 @@
 
 # Tauri regenerates these from tauri.conf.json and capabilities/ on every build.
 /windows-app/src-tauri/gen/
+
+# Working notes and design boards: kept locally, not part of the build.
+/docs/

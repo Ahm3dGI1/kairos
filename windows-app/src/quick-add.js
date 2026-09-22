@@ -1,9 +1,3 @@
-// The hotkey overlay: one field, one job.
-//
-// Ctrl+Shift+Space summons it from anywhere. Type a line, press Enter, it is
-// gone. It shares its field with the main window, so the parsed phrases get the
-// same tints and the same backspace-to-revert.
-
 import { createCapture } from './capture.js';
 import { el, invoke, listen, today } from './shared.js';
 

@@ -1,6 +1,3 @@
-// Helpers every window shares: the IPC call, date formatting, and the small
-// amount of DOM building that would otherwise be repeated three times.
-
 export const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
 export const listen = (event, handler) => window.__TAURI__.event.listen(event, handler);
 

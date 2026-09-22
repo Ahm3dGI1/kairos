@@ -1,10 +1,3 @@
-// The settings page.
-//
-// The switches are not listed here. The core describes them — key, section,
-// label, why you would want it, and whether changing it needs a restart — and
-// this file renders whatever it is given. Adding a switch is a change to one
-// Rust array; this page picks it up with no edit at all.
-
 import { call, clear, el } from './shared.js';
 
 export function createSettings({ container, onChange }) {

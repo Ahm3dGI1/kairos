@@ -1,7 +1,3 @@
-//! Whitespace tokenizer that keeps byte spans, so every extractor can report
-//! exactly which slice of the input produced a field — and so the title can be
-//! rebuilt from whatever nobody claimed.
-
 use std::ops::Range;
 
 #[derive(Debug, Clone)]

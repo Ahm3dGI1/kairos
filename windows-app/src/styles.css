@@ -1,11 +1,3 @@
-/* Kairos — Direction B, "Command Deck".
-   A dark-first, terminal-adjacent surface: proportional type for the things a
-   person wrote, monospace for everything the machine knows. Density is the
-   point — 26px rows, hairline rules, no decoration that is not information.
-
-   Every colour below is a token. Dark is the default and light is the
-   override, because this is a tool that sits open next to real work. */
-
 :root {
   color-scheme: dark;
 

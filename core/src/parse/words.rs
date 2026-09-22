@@ -1,6 +1,3 @@
-//! Word-level vocabulary: weekdays, months, and the number forms that show up
-//! in date and recurrence phrases.
-
 use chrono::Weekday;
 
 /// Recognizes a weekday name or common abbreviation. Accepts a trailing "s"

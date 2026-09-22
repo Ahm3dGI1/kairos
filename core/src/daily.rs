@@ -1,15 +1,3 @@
-//! Habits, the two numbers worth tracking by hand, and the day's journal.
-//!
-//! A habit is not a task. A task is done once and gone; a habit is a thing you
-//! want to have done on as many days as possible, and the interesting question
-//! is the run of days, not any single one. Modelling habits as recurring tasks
-//! would put them in the agenda competing for attention with real work, and
-//! would lose the streak the moment one was completed.
-//!
-//! Screen time and sleep are entered by hand on purpose: reading them
-//! automatically would mean a background agent or a vendor API, and the project
-//! is offline-first and self-hosted (spec §3).
-
 use std::collections::{BTreeMap, HashSet};
 
 use chrono::NaiveDate;

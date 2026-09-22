@@ -1,9 +1,3 @@
-//! The prayer page.
-//!
-//! Nothing here calls anything. The times come from `kairos-core`, which works
-//! them out from the date and the coordinates in settings — so the page is as
-//! offline as the rest of the app, and stays right on a plane.
-
 use chrono::{Datelike, Local, NaiveDate, Timelike};
 use kairos_core::prayer;
 use serde::Serialize;

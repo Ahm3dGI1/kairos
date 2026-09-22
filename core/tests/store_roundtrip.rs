@@ -1,5 +1,3 @@
-//! The local store: persistence, the saved views, and undo.
-
 use chrono::NaiveDate;
 use kairos_core::store::UndoKind;
 use kairos_core::{

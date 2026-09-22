@@ -1,9 +1,3 @@
-//! Mapping between [`Task`] and its database row.
-//!
-//! Scalars that views filter or sort on get their own columns so SQLite can
-//! index them; the list-shaped fields are JSON. Columns are read by name, so
-//! adding one later cannot silently shift the others.
-
 use chrono::{NaiveDate, NaiveTime};
 use uuid::Uuid;
 

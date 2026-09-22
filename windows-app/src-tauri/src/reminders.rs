@@ -1,13 +1,3 @@
-//! Reminders, and the tray tooltip.
-//!
-//! Spec §4 asks for two things this module covers: notifications when a task
-//! comes due, and a tray icon you can hover to see what is waiting.
-//!
-//! The loop is deliberately dumb — it wakes on a timer and asks the store what
-//! is due — rather than scheduling a timer per task. Tasks move, recurrence
-//! shifts, the machine sleeps; a poll survives all of that, where a pile of
-//! scheduled timers quietly goes stale.
-
 use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::Duration;

@@ -1,5 +1,3 @@
-//! The agenda grouping, and the habits/journal day log.
-
 use std::collections::HashSet;
 
 use chrono::NaiveDate;

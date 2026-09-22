@@ -1,14 +1,3 @@
-// The capture bar.
-//
-// Two jobs beyond holding text: showing which phrases the parser claimed, and
-// letting the user take any of them back. A claimed phrase is tinted in place
-// by what it set — when, where, how much — and backspacing against one drops
-// the tint, leaving the words as ordinary title text, the way an editor undoes
-// an autoformat. R restores the last one taken back.
-//
-// The tints are painted by a mirror layer behind a transparent input, which is
-// the only way to decorate ranges inside a plain <input>.
-
 import { call, clear, el, formatDue, formatTime } from './shared.js';
 
 const escapeHtml = (text) =>

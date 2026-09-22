@@ -1,16 +1,3 @@
-//! Noticing that someone edited the vault behind the app's back.
-//!
-//! Deliberately a poll rather than a filesystem-event subscription. The vault
-//! is meant to live wherever the user keeps their notes — a synced folder, a
-//! network share, a git checkout — and change notifications on those are
-//! unreliable in exactly the cases that matter. A fingerprint of a few dozen
-//! small files costs nothing to take twice a second, and it cannot miss a
-//! change the way a dropped event can.
-//!
-//! The app's own writes are seen too, but they cost nothing: the vault only
-//! writes a file whose contents differ, so re-importing what we just exported
-//! produces an identical database and an identical folder.
-
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};

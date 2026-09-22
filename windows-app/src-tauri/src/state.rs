@@ -1,15 +1,3 @@
-//! Application state: one open store, one vault, one set of settings, shared
-//! across every window.
-//!
-//! The tray, the widget, and the quick-add overlay are separate webviews but
-//! one app — they must see the same tasks the instant either changes them, so
-//! they share a single [`Store`] rather than each opening the database.
-//!
-//! The vault is the system of record and the database is its index, so the
-//! order of operations at startup matters: read the files, rebuild the
-//! database from them, and only then show anything. After that every mutation
-//! writes the database and mirrors straight back out to the files.
-
 use std::path::PathBuf;
 use std::sync::Mutex;
 

@@ -1,8 +1,3 @@
-//! The saved views: Today, Overdue, Next 7 Days, by tag or project, search.
-//!
-//! Filters are values, not queries, so the same definition drives the store,
-//! the tray preview, and the widget without any of them restating the rule.
-
 use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 

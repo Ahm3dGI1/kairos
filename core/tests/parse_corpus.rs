@@ -1,9 +1,3 @@
-//! Table-driven corpus for the single-line parser.
-//!
-//! Every case runs against a fixed "now" — Sunday 2026-09-13 at 09:00 — so
-//! relative phrases have one right answer. Sunday is deliberate: it makes the
-//! difference between "sunday" (today) and "next sunday" (a week out) visible.
-
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Weekday};
 use kairos_core::{parse_at, Field, Priority, Recurrence, WeekdaySet};
 
@@ -493,4 +487,19 @@ fn a_picked_set_describes_itself_back() {
         let rule = Recurrence::Weekly { days };
         assert_eq!(recurrence_from_phrase(&rule.describe()), Some(rule), "{}", rule.describe());
     }
+}
+
+/// The one-line pitch, as a test: this is what the whole app is for.
+#[test]
+fn a_single_line_becomes_a_structured_task() {
+    use chrono::{NaiveDate, NaiveTime};
+    use kairos_core::{parse_at, Recurrence};
+
+    let now = NaiveDate::from_ymd_opt(2026, 9, 13).unwrap().and_hms_opt(9, 0, 0).unwrap();
+    let result = parse_at("gym every day 5pm #health", now);
+
+    assert_eq!(result.task.title, "gym");
+    assert_eq!(result.task.recurrence, Some(Recurrence::Daily));
+    assert_eq!(result.task.time, NaiveTime::from_hms_opt(17, 0, 0));
+    assert_eq!(result.task.tags, ["health"]);
 }

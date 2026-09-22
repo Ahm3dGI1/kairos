@@ -1,9 +1,3 @@
-//! Kairos — the Windows 11 shell.
-//!
-//! A Tauri app over `kairos-core`. This crate owns windows, the tray, the global
-//! hotkey and the IPC surface; every decision about what a task *means* belongs
-//! to the core, so that a Linux or mobile client behaves identically.
-
 // Release builds are a desktop app, not a console program.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

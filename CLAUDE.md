@@ -22,10 +22,6 @@ keyboard-first navigation — plus Windows-native touches: a tray icon with hove
 always-visible desktop widget, and a global hotkey launcher. Everything is stored as plain Markdown you can edit in any editor; sync
 is an optional layer on top, served by a server users host themselves.
 
-**The full spec lives in [`docs/todo-app-spec.md`](docs/todo-app-spec.md) — read it before making
-architectural decisions.** It carries the detail this file omits: the complete feature list, sync
-and auth model, stretch goals, and the open questions still unsettled.
-
 ## Tech stack
 
 Phase 1 is built; the later platforms are still open. Do not treat a candidate as a commitment.
@@ -53,12 +49,11 @@ separate repos only if independent maintainers take over a platform.
 ```
 /core          task model, NL parsing, recurrence, vault, store   (crate kairos-core)
 /windows-app   Tauri shell: tray, widget, hotkey, calendar, UI    (crate kairos-windows)
-/docs          the spec, and the design boards the shell is built against
 ```
 
 A Linux client, mobile clients and a sync server are planned; they get directories when they get
-code. What each is meant to be is in the spec (§3, §6), which is one place rather than three
-empty ones.
+code. A longer spec and the design boards the shell was built against live in `/docs`, which is
+kept locally and not in version control.
 
 ## Build / test / lint
 
@@ -88,5 +83,3 @@ cargo tauri build               # installers -> target/release/bundle
   to run, or on accounts a user cannot provision themselves.
 - **Cross-platform by default.** Platform-specific code stays in that platform's package.
 - **Code style is delegated to `rustfmt` and `clippy`** — do not add formatting rules here.
-- **Keep this file and the spec in sync.** When an open question in §6 is resolved, update both
-  the spec and the status table above in the same change.

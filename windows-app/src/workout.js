@@ -1,12 +1,3 @@
-// The workout book.
-//
-// The spreadsheet this replaces had one page per training day, the exercises
-// down the left and a pair of columns per session to the right. That shape is
-// kept exactly, because it is the shape that lets you see the only thing worth
-// seeing: what you did last time, next to what you are doing now.
-//
-// Sessions run newest-first from the left, so today sits where you look first.
-
 import { call, clear, el } from './shared.js';
 
 export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) {
@@ -69,8 +60,7 @@ export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) 
     load();
   }
 
-  // ---------- routines: the pages of the book ----------
-
+  // -- routines: the pages of the book
   function renderRoutines() {
     clear(routinesNode);
     routinesNode.appendChild(el('div', { class: 'lists-head', text: 'ROUTINES' }));
@@ -136,8 +126,7 @@ export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) 
     routinesNode.appendChild(adder);
   }
 
-  // ---------- the grid ----------
-
+  // -- the grid
   function renderGrid() {
     clear(gridNode);
     if (!page.routine) {

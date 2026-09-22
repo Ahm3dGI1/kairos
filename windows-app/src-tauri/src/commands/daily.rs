@@ -1,9 +1,3 @@
-//! Commands for the two new surfaces: the grouped agenda, and the habit month
-//! — a grid of habits by day, with the month's journal beside it.
-//!
-//! Like the rest of the shell, these are wrappers. The bucketing rules live in
-//! `kairos_core::agenda` and the habit rules in `kairos_core::daily`.
-
 use chrono::{Datelike, Local, NaiveDate};
 use kairos_core::{agenda, daily, DayLog, HabitId, JournalEntry, MonthJournal, Narrow, Task};
 use serde::{Deserialize, Serialize};
@@ -12,8 +6,7 @@ use tauri::{AppHandle, State};
 use super::{read_store, today, with_store, CmdResult, TaskView};
 use crate::state::AppState;
 
-// ---------- the agenda ----------
-
+// -- the agenda
 /// What the agenda should show: everything ahead, optionally narrowed, with
 /// completed work folded in only when asked for.
 #[derive(Debug, Default, Deserialize)]
@@ -58,8 +51,7 @@ pub fn agenda(state: State<'_, AppState>, query: AgendaQuery) -> CmdResult<Vec<G
         .collect())
 }
 
-// ---------- the habit month ----------
-
+// -- the habit month
 /// One habit's row across the month.
 #[derive(Serialize)]
 pub struct HabitRow {
@@ -331,8 +323,7 @@ pub fn set_habit_value(
     })
 }
 
-// ---------- the month journal ----------
-
+// -- the month journal
 #[tauri::command]
 pub fn month_journal(state: State<'_, AppState>, year: i32, month: u32) -> CmdResult<MonthJournal> {
     read_store(&state, |store| store.month_journal(year, month))

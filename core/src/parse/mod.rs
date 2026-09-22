@@ -1,18 +1,3 @@
-//! Single-line natural-language parsing: "gym every day 5pm" in, a structured
-//! [`Task`] out.
-//!
-//! The pipeline runs markers, then recurrence, then time, then date, each
-//! claiming the tokens it recognizes. Whatever is left over is the title —
-//! which is why order matters: `#friday` has to be claimed as a tag before it
-//! can be read as a date, and "every monday" has to become a recurrence before
-//! "monday" can be read as a due date.
-//!
-//! Ambiguity is resolved by guessing rather than by asking, because capture
-//! speed is the point of the app. Every guess is recorded in
-//! [`ParseResult::guesses`] so a client can show what it inferred, and
-//! [`ParseResult::matches`] says which slice of the input produced each field
-//! so any of it can be overridden.
-
 mod date;
 mod markers;
 mod recurrence;

@@ -1,6 +1,3 @@
-/* The two frameless windows: the hotkey overlay and the sticky note.
-   Both draw their own edge and shadow, because they float over other apps. */
-
 body.overlay {
   display: block;
   padding: 14px 16px;

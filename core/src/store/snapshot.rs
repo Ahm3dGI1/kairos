@@ -1,12 +1,3 @@
-//! The whole database as plain values, and the two conversions either side of
-//! it.
-//!
-//! This is the seam that lets the vault be the system of record without the
-//! store knowing anything about files, or the vault anything about SQL. The
-//! store can produce a [`Snapshot`] and be rebuilt from one; the vault can
-//! write a snapshot out as Markdown and read it back. Neither imports the
-//! other.
-
 use rusqlite::params;
 
 use super::{Result, Store, DATE_FORMAT};

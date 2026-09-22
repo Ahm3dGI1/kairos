@@ -1,5 +1,3 @@
-//! Capturing, editing and completing tasks.
-
 use chrono::{Datelike, Local, NaiveDate};
 use kairos_core::{parse_excluding, recur, Field, Filter, Priority, Sort, Task, TaskId};
 use serde::{Deserialize, Serialize};

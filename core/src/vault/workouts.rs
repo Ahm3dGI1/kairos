@@ -1,25 +1,3 @@
-//! The workout book as Markdown — one file per routine.
-//!
-//! ```text
-//! # Push
-//!
-//! ## Exercises
-//!
-//! - Bench press
-//! - Overhead press
-//!
-//! ## 2026-09-19
-//!
-//! - Bench press: 10x60, 8x65, 6x70
-//! - Overhead press: 12x30
-//! > Felt strong.
-//! ```
-//!
-//! Nothing here carries a visible id. A routine is identified by its file, an
-//! exercise by its name within that routine, and a session by its date — which
-//! is exactly how the spreadsheet this replaces identified them, and it means
-//! the file reads like something a person wrote down between sets.
-
 use chrono::NaiveDate;
 use uuid::Uuid;
 

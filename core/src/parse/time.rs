@@ -1,9 +1,3 @@
-//! Clock times.
-//!
-//! The rule that keeps this from eating innocent numbers: a bare number is only
-//! a time when something marks it as one — an am/pm suffix, a colon, or a
-//! preceding "at". "call 5 people" keeps its 5; "call at 5" does not.
-
 use std::ops::Range;
 
 use chrono::NaiveTime;

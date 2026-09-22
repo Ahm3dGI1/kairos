@@ -1,16 +1,3 @@
-//! Strength training, modelled the way the spreadsheet it replaces was.
-//!
-//! A **routine** is a page — push day, pull day, leg day. An **exercise** is a
-//! row on that page, and the rows stay the same week to week, which is the
-//! whole point of a routine. A **session** is one dated instance of the page,
-//! and within it each exercise has a handful of **sets**: a rep count and a
-//! weight.
-//!
-//! This is deliberately not modelled as tasks. A task is a thing you finish; a
-//! set is a measurement, and the useful question about it is not "is it done"
-//! but "was it more than last time". Forcing it into the task model would lose
-//! the numbers, which are the only reason to record any of it.
-
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

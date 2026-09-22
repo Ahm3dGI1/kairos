@@ -1,15 +1,3 @@
-//! What the user has turned on, and where their files live.
-//!
-//! Settings are part of the vault, not the database: a preference you cannot
-//! read without launching the app is a preference you cannot fix when the app
-//! will not launch. `settings.json` sits beside the notes as plain JSON, and
-//! anything missing from it falls back to the default — so a hand-edited file
-//! that drops half its keys still loads.
-//!
-//! The list of switches lives here rather than in a client because every shell
-//! should offer the same ones. A client renders [`Settings::describe`] and
-//! calls [`Settings::set`]; it never hard-codes a key.
-
 use serde::{Deserialize, Serialize};
 
 /// Everything the user can turn on or off.

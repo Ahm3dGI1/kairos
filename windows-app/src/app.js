@@ -1,9 +1,3 @@
-// Kairos — main window, Direction B.
-//
-// A rail for the three pages, a mono status line that says where you are and
-// what you can press, the page itself, and a capture bar pinned to the bottom
-// that is always there and never a modal.
-
 import { createCapture } from './capture.js';
 import { dismissPopovers, refreshHabits, renderDetail } from './detail.js';
 import { createHabits } from './habits.js';
@@ -53,8 +47,7 @@ for (const id of [
   dom[id] = document.getElementById(id);
 }
 
-// ---------- capture ----------
-
+// -- capture
 const settings = createSettings({
   container: dom.settings,
   onChange: loadSettings,
@@ -91,8 +84,7 @@ const capture = createCapture({
   },
 });
 
-// ---------- habits ----------
-
+// -- habits
 const habits = createHabits({
   rows: dom['habit-rows'],
   journal: dom.journal,
@@ -116,8 +108,7 @@ const workout = createWorkout({
   },
 });
 
-// ---------- data ----------
-
+// -- data
 async function refresh() {
   state.todayDate = (await today()) ?? new Date();
 
@@ -172,8 +163,7 @@ async function loadAgenda() {
   renderPane();
 }
 
-// ---------- the status line ----------
-
+// -- the status line
 function renderStatus() {
   // These pages own their own line.
   if (state.page === 'habits' || state.page === 'workout' || state.page === 'prayer') return;
@@ -326,8 +316,7 @@ function renderCalendarTools() {
   );
 }
 
-// ---------- the task list ----------
-
+// -- the task list
 function renderAgenda() {
   clear(dom.agenda);
 
@@ -417,8 +406,7 @@ function taskRow(task, index, groupId) {
   );
 }
 
-// ---------- the detail pane ----------
-
+// -- the detail pane
 function openDetail(id) {
   state.detailId = id;
   renderAgenda();
@@ -474,8 +462,7 @@ function renderPane() {
   });
 }
 
-// ---------- calendar ----------
-
+// -- calendar
 async function renderCalendar() {
   const [year, month] = state.month ?? (await call('current_month', undefined, 'Calendar')) ?? [];
   if (!year) return;
@@ -566,8 +553,7 @@ function stepMonth(delta) {
   renderCalendar();
 }
 
-// ---------- actions ----------
-
+// -- actions
 async function toggleComplete(task) {
   const command = task.completed_at ? 'uncomplete_task' : 'complete_task';
   const result = await call(command, { id: task.id }, 'Updating task');
@@ -635,8 +621,7 @@ function toast(message, undoable = false) {
   }, 3600);
 }
 
-// ---------- pages ----------
-
+// -- pages
 const HINTS = {
   agenda: 'J K move · X done · U undo · Y redo',
   calendar: 'H L month · T today · Enter opens',
@@ -692,8 +677,7 @@ function setPage(page) {
   refresh();
 }
 
-// ---------- keyboard ----------
-
+// -- keyboard
 function takesKeys(target) {
   if (!(target instanceof Element) || target === dom.agenda) return false;
   return (
@@ -845,8 +829,7 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-// ---------- wiring ----------
-
+// -- wiring
 for (const name of PAGES) {
   dom[`page-${name}`].addEventListener('click', () => setPage(name));
 }

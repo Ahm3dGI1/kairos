@@ -1,10 +1,3 @@
-//! The vault as the app actually uses it: seed, mirror, notice an outside
-//! edit, and rebuild a database that has been thrown away.
-//!
-//! These run the same sequence the Windows shell does at startup and after
-//! every mutation, so a break here is a break in the app even though no window
-//! is involved.
-
 use chrono::NaiveDate;
 use kairos_core::vault::Vault;
 use kairos_core::{Priority, Recurrence, Store, Task};

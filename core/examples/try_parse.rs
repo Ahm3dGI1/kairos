@@ -1,8 +1,3 @@
-//! Try the parser on a line: `cargo run -p kairos-core --example try_parse -- "gym every day 5pm"`
-//!
-//! With no argument it runs a short demo set. Parsing resolves against the real
-//! local time, so relative phrases mean what they would mean right now.
-
 use kairos_core::parse;
 
 fn main() {

@@ -1,10 +1,3 @@
-// The sticky note.
-//
-// A glance at today and nothing else. It behaves like any other window and
-// drops behind whatever you focus next; the pin makes it stay on top, which is
-// a deliberate choice rather than the default because always-on-top is
-// intrusive by nature.
-
 import { call, clear, el, invoke, listen, parseDate, today } from './shared.js';
 
 const list = document.getElementById('list');

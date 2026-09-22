@@ -1,10 +1,3 @@
-//! Turning a [`Recurrence`] rule into actual dates.
-//!
-//! A recurring task stores an anchor ([`Task::due`]) and a rule; the dates it
-//! falls on are derived, never stored. Exceptions layer on top: a single
-//! occurrence can be skipped or moved without touching the rule, which is what
-//! lets "skip just this Monday" leave the series intact.
-
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 
 use crate::task::{Checklist, Exception, ExceptionAction, Recurrence, Task, WeekdaySet};

@@ -42,8 +42,7 @@ inferred and let the user override any of it. Any match can be *un-parsed*:
 the capture field revert a phrase on backspace instead of deleting a character.
 
 Dates and times are naive local values. The core carries no timezone; the shell
-supplies one. Multi-device sync is what will force that question — see
-`docs/todo-app-spec.md` §6.
+supplies one. Multi-device sync is what will force that question.
 
 ## What the parser recognizes
 

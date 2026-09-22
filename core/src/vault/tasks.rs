@@ -1,29 +1,3 @@
-//! Tasks as Markdown checklists.
-//!
-//! One file per project, one line per task, in a shape Obsidian and every other
-//! Markdown editor already renders:
-//!
-//! ```text
-//! # Health
-//!
-//! - [ ] Gym due:2026-09-20 at:17:00 repeat:"every day" #fitness !p1 ^7f3a9c2e-…
-//!   - [ ] warm up
-//!   - [x] stretch
-//!   > Bring the new shoes.
-//! ```
-//!
-//! Two rules make the file safe to edit by hand:
-//!
-//! 1. **Metadata is a suffix.** Reading walks tokens from the end of the line
-//!    and stops at the first one it does not recognize; everything before that
-//!    is the title. So a `#` or a `due:` in the middle of a title stays in the
-//!    title, which is what someone typing prose would expect.
-//! 2. **A line with no `^id` is new**, so it goes through the ordinary
-//!    natural-language parser. Jotting `- [ ] gym every day 5pm` into a file
-//!    from any editor gives you the same task the capture bar would have.
-//!    Existing lines are read strictly instead: the app wrote them, and
-//!    re-parsing a title someone edited could silently move a date.
-
 use chrono::{NaiveDate, NaiveTime};
 use uuid::Uuid;
 

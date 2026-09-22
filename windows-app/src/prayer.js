@@ -1,9 +1,3 @@
-// The prayer page.
-//
-// Six rows and a countdown. Everything on it is worked out locally from the
-// coordinates in settings, so there is nothing to load and nothing to fail —
-// which is why the only empty state is "you have not said where you are".
-
 import { call, clear, el } from './shared.js';
 
 export function createPrayer({ page, onStatus }) {

@@ -1,9 +1,3 @@
-//! Calendar dates: relative ("tomorrow", "in 3 days"), weekday-relative
-//! ("next friday"), and absolute ("march 5", "2026-12-25").
-//!
-//! Everything resolves against an injected `today`, so results are deterministic
-//! in tests and honest about the local day boundary at runtime.
-
 use std::ops::Range;
 
 use chrono::{Datelike, NaiveDate, Weekday};

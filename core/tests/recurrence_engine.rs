@@ -1,8 +1,3 @@
-//! Expansion of recurrence rules into dates, and what completing one does.
-//!
-//! The anchor throughout is Sunday 2026-09-13 — a Sunday, so a rule naming a
-//! weekday has to move forward off the anchor to find its first occurrence.
-
 use chrono::{NaiveDate, Weekday};
 use kairos_core::{
     complete_occurrence, next_occurrence, occurrences, Exception, Recurrence, Task, WeekdaySet,
