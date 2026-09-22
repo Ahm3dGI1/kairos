@@ -372,19 +372,10 @@ function metaFor(task, groupId) {
   // p1/p2/p3 reads in a mono column where "medium" does not.
   const rank = { High: 'p1', Medium: 'p2', Low: 'p3' }[task.priority];
   if (rank) bits.unshift(rank);
-  if (task.recurrence_label) bits.push(shortRule(task.recurrence_label));
   if (task.project) bits.push(`@${task.project}`);
   for (const tag of task.tags ?? []) bits.push(`#${tag}`);
   if (task.subtasks?.length) bits.push(`${task.subtasks_done}/${task.subtasks.length}`);
   return bits;
-}
-
-/** "every weekday" reads as "weekdays" in a column this narrow. */
-function shortRule(label) {
-  return label
-    .replace(/^every weekday$/, 'weekdays')
-    .replace(/^every day$/, 'daily')
-    .replace(/^every /, '');
 }
 
 function taskRow(task, index, groupId) {

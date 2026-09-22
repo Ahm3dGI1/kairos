@@ -433,3 +433,64 @@ fn weekday_runs_may_use_slashes() {
     // A slash between things that are not all weekdays is not a weekday run.
     assert_eq!(recurrence_from_phrase("every mon/nonsense"), None);
 }
+
+/// The day picker builds a phrase and the core parses it back — that is the
+/// whole contract, and there is no other channel. A subset that failed to
+/// parse would not be a cosmetic bug: the command reads "no rule" and clears
+/// the repeat, silently. So all 127 of them are checked.
+#[test]
+fn every_weekday_set_the_picker_can_build_parses_back() {
+    use chrono::Weekday;
+    use kairos_core::{recurrence_from_phrase, Recurrence, WeekdaySet};
+
+    const DAYS: [(&str, Weekday); 7] = [
+        ("monday", Weekday::Mon),
+        ("tuesday", Weekday::Tue),
+        ("wednesday", Weekday::Wed),
+        ("thursday", Weekday::Thu),
+        ("friday", Weekday::Fri),
+        ("saturday", Weekday::Sat),
+        ("sunday", Weekday::Sun),
+    ];
+
+    for mask in 1u8..128 {
+        let picked: Vec<_> = DAYS.iter().enumerate().filter(|(i, _)| mask >> i & 1 == 1).collect();
+        // Exactly what the picker joins together.
+        let phrase = format!(
+            "every {}",
+            picked.iter().map(|(_, (name, _))| *name).collect::<Vec<_>>().join(" and ")
+        );
+        let expected: WeekdaySet = picked.iter().map(|(_, (_, day))| *day).collect();
+
+        let parsed = recurrence_from_phrase(&phrase);
+        let days = match parsed {
+            Some(Recurrence::Weekly { days }) => days,
+            other => panic!("{phrase:?} parsed as {other:?}, which would clear the repeat"),
+        };
+        assert_eq!(days, expected, "{phrase:?}");
+    }
+}
+
+/// And the other direction, so what the picker reads back out of a saved rule
+/// is the set it put in.
+#[test]
+fn a_picked_set_describes_itself_back() {
+    use chrono::Weekday;
+    use kairos_core::{recurrence_from_phrase, Recurrence, WeekdaySet};
+
+    const DAYS: [Weekday; 7] = [
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+        Weekday::Fri,
+        Weekday::Sat,
+        Weekday::Sun,
+    ];
+    for mask in 1u8..128 {
+        let days: WeekdaySet =
+            DAYS.iter().enumerate().filter(|(i, _)| mask >> i & 1 == 1).map(|(_, d)| *d).collect();
+        let rule = Recurrence::Weekly { days };
+        assert_eq!(recurrence_from_phrase(&rule.describe()), Some(rule), "{}", rule.describe());
+    }
+}

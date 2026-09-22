@@ -31,29 +31,59 @@ const REPEATS = [
   ['every year', 'yearly'],
 ];
 
-/** Lowercase name, and the single letter the picker shows. */
+/** Lowercase name, and the shortest unambiguous form of it. */
 const DAYS = [
   ['monday', 'M'],
   ['tuesday', 'T'],
   ['wednesday', 'W'],
-  ['thursday', 'T'],
+  ['thursday', 'Th'],
   ['friday', 'F'],
-  ['saturday', 'S'],
+  ['saturday', 'St'],
   ['sunday', 'S'],
 ];
 
 /**
- * The weekdays named in a rule's description.
+ * The chip's text for a rule.
  *
- * "every Monday and Wednesday" -> ['monday', 'wednesday']. Only a rule that
- * names days at all has any: "every weekday" is a set the core spells out as a
- * word, and pre-selecting M-F from it would turn a preset into a custom rule
- * the moment the popover opened.
+ * Rules that name days get the short forms, because "every Monday,
+ * Wednesday and Friday" does not fit a chip. Everything else is left as the
+ * core wrote it — "every weekday" and "every month on the 15th" are already
+ * as short as they are clear.
  */
-function daysIn(label) {
+function repeatLabel(label) {
+  if (!label) return 'no repeat';
+  const named = DAYS.filter(([name]) => label.toLowerCase().includes(name));
+  if (!named.length) return label;
+  const every = label.toLowerCase().startsWith('every other') ? 'every other' : 'every';
+  return `${every} ${named.map(([, short]) => short).join(' ')}`;
+}
+
+/**
+ * The weekdays a rule falls on.
+ *
+ * Named ones first — "every Monday and Wednesday". Failing that, the presets
+ * are day sets too, just spelled as words: daily is all seven, weekdays is
+ * Monday to Friday, and a plain weekly rule repeats on whatever day the task
+ * is anchored to. Showing those lit up means the keys always say what the
+ * rule actually does, and editing one starts from where it already is rather
+ * than from nothing.
+ */
+function daysIn(label, dueIso) {
   const words = label.toLowerCase();
-  if (!DAYS.some(([name]) => words.includes(name))) return [];
-  return DAYS.filter(([name]) => words.includes(name)).map(([name]) => name);
+  const named = DAYS.filter(([name]) => words.includes(name)).map(([name]) => name);
+  if (named.length) return named;
+
+  const all = DAYS.map(([name]) => name);
+  if (words === 'every day') return all;
+  if (words === 'every weekday') return all.slice(0, 5);
+  if (words === 'every weekend') return all.slice(5);
+  // "every week" repeats on the day the task is anchored to, which is the one
+  // worth lighting up. Monday-first, matching DAYS.
+  if (words === 'every week' && dueIso) {
+    const date = parseDate(dueIso);
+    if (date) return [all[(date.getDay() + 6) % 7]];
+  }
+  return [];
 }
 
 /**
@@ -287,7 +317,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
   const repeatChip = el('button', {
     class: 'chip',
     type: 'button',
-    text: task.recurrence_label ?? 'no repeat',
+    text: repeatLabel(task.recurrence_label),
   });
   repeatChip.addEventListener('click', () =>
     openPop(root, repeatChip, (pop, close) => {
@@ -311,7 +341,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
       // would have parsed — "every Monday and Wednesday" — rather than adding
       // a second way to say a rule. describe() and the parser are inverses, so
       // the chosen days come back out of the label they produced.
-      const chosen = new Set(daysIn(current));
+      const chosen = new Set(daysIn(current, task.due));
       const row = el('div', { class: 'day-picker' });
       const send = () => {
         const picked = DAYS.filter(([name]) => chosen.has(name));

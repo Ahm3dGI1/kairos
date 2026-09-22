@@ -144,6 +144,13 @@ every device is independent.
 - **The workout book** — routines (push, pull, legs) hold exercises, and each
   session is a dated column of reps and weights beside them. Starting a session
   copies the last one's numbers so you adjust rather than retype.
+- **Repeats** — seven presets, and a row of day keys for anything else. The
+  keys compose the phrase the capture bar would have parsed rather than being
+  a second way to say a rule, and a preset lights up the days it means, so
+  "every weekday" opens with Monday to Friday already on and editing one
+  starts from where it is. Days read M T W Th F St S, because Tuesday and
+  Thursday share a letter and so do Saturday and Sunday. The rule shows in the
+  detail pane; the list rows stay as date, priority, project and tags.
 - **Recurring exceptions** — skip or push a single occurrence from the detail
   pane without breaking the series.
 - **Start with Windows** — off by default. On, it adds a per-user entry to
