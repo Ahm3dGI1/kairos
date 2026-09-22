@@ -63,30 +63,45 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
 
     if (!data.habits.length) {
       rows.appendChild(
-        el('div', { class: 'empty', text: 'no habits yet — type one below and press Enter' }),
+        el('div', {
+          class: 'empty',
+          text: 'no habits yet — type one below and press Enter, or "Sleep :duration"',
+        }),
       );
+    }
+
+    // Archiving keeps the history but takes the row off the grid, so there
+    // has to be somewhere it went.
+    if (data.archived?.length) {
+      const list = el('div', { class: 'archived-habits' }, [
+        el('span', { class: 'label', text: 'ARCHIVED' }),
+      ]);
+      for (const habit of data.archived) {
+        list.appendChild(
+          el('button', {
+            type: 'button',
+            class: 'restore',
+            text: habit.name,
+            title: 'Put it back on the grid',
+            onclick: async () => {
+              await call('edit_habit', { id: habit.id, archived: false }, 'Restore habit');
+              load();
+            },
+          }),
+        );
+      }
+      rows.appendChild(list);
     }
   }
 
   function habitRow(habit) {
-    const name = el('span', { class: 'n', text: habit.name, title: 'Double-click to rename' });
-    name.addEventListener('dblclick', () => {
-      const input = el('input', { class: 'n', type: 'text', value: habit.name });
-      input.style.cssText =
-        'border:0;background:transparent;outline:none;font:inherit;color:inherit;width:100%';
-      name.replaceWith(input);
-      input.focus();
-      input.select();
-      const commit = async () => {
-        await call('rename_habit', { id: habit.id, name: input.value }, 'Rename habit');
-        load();
-      };
-      input.addEventListener('blur', commit);
-      input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') commit();
-        if (event.key === 'Escape') load();
-      });
+    const name = el('button', {
+      class: 'n',
+      type: 'button',
+      text: habit.name,
+      title: 'Rename, change what it records, archive or delete',
     });
+    name.addEventListener('click', () => openEditor(habit, name));
 
     // The stats belong on the right, where every row's read the same way.
     const elapsed = data.days.filter((d) => !d.is_future).length;
@@ -133,6 +148,139 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
       days,
       el('span', { class: 'habit-total', text: stats.join(' · ') }),
     ]);
+  }
+
+  /** Whichever editor is open, so a second click replaces it. */
+  let editor = null;
+
+  function closeEditor() {
+    editor?.remove();
+    editor = null;
+  }
+
+  /**
+   * The habit editor.
+   *
+   * Fixed to the viewport rather than placed inside the grid, because the
+   * grid scrolls sideways and would clip it. Changes apply as they are made
+   * and the panel stays open, so renaming and then changing what a habit
+   * records is one visit rather than two.
+   */
+  function openEditor(habit, anchor) {
+    closeEditor();
+    const box = anchor.getBoundingClientRect();
+
+    const apply = async (change, close = false) => {
+      await call('edit_habit', { id: habit.id, ...change }, 'Edit habit');
+      if (close) closeEditor();
+      load();
+    };
+
+    const unit = habit.kind.startsWith('number:') ? habit.kind.slice('number:'.length) : '';
+    const base = habit.kind.startsWith('number') ? 'number' : habit.kind;
+
+    const nameInput = el('input', { type: 'text', value: habit.name, spellcheck: 'false' });
+    nameInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') nameInput.blur();
+    });
+    nameInput.addEventListener('blur', () => {
+      if (nameInput.value.trim() && nameInput.value !== habit.name) {
+        apply({ name: nameInput.value });
+      }
+    });
+
+    const unitInput = el('input', {
+      type: 'text',
+      value: unit,
+      placeholder: 'pages, km, glasses',
+      spellcheck: 'false',
+    });
+    unitInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') unitInput.blur();
+    });
+    unitInput.addEventListener('blur', () => {
+      if (unitInput.value.trim() !== unit) {
+        apply({ kind: `number:${unitInput.value.trim()}`.replace(/:$/, '') });
+      }
+    });
+
+    const unitField = el('label', { class: 'pop-field' }, [
+      el('span', { text: 'unit' }),
+      unitInput,
+    ]);
+    unitField.hidden = base !== 'number';
+
+    const kinds = el('div', { class: 'pop-row' });
+    for (const [value, label] of [
+      ['check', 'a tick'],
+      ['duration', 'a length of time'],
+      ['number', 'a number'],
+    ]) {
+      kinds.appendChild(
+        el('button', {
+          type: 'button',
+          class: value === base ? 'on' : '',
+          text: label,
+          onclick: () => {
+            // Showing the unit box first, so choosing "a number" does not
+            // close over the one question it raises.
+            if (value === 'number') {
+              unitField.hidden = false;
+              unitInput.focus();
+            }
+            apply({ kind: value === 'number' && unit ? `number:${unit}` : value });
+          },
+        }),
+      );
+    }
+
+    editor = el('div', { class: 'pop habit-editor' }, [
+      el('label', { class: 'pop-field' }, [el('span', { text: 'name' }), nameInput]),
+      el('div', { class: 'pop-label', text: 'records' }),
+      kinds,
+      unitField,
+      el('div', { class: 'pop-row pop-row-end' }, [
+        el('button', {
+          type: 'button',
+          text: 'archive',
+          title: 'Keeps the history and takes it off the grid',
+          onclick: () => apply({ archived: true }, true),
+        }),
+        el('button', {
+          type: 'button',
+          class: 'danger',
+          text: 'delete',
+          title: 'Removes the habit and every tick of it',
+          onclick: async () => {
+            await call('delete_habit', { id: habit.id }, 'Delete habit');
+            closeEditor();
+            load();
+          },
+        }),
+      ]),
+    ]);
+
+    editor.style.position = 'fixed';
+    editor.style.left = `${Math.round(Math.min(box.left, window.innerWidth - 260))}px`;
+    editor.style.top = `${Math.round(box.bottom + 6)}px`;
+    document.body.appendChild(editor);
+    nameInput.focus();
+    nameInput.select();
+
+    // Escape closes it, and so does a click anywhere that is not in it.
+    const away = (event) => {
+      if (!editor?.contains(event.target)) {
+        closeEditor();
+        document.removeEventListener('mousedown', away, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', away, true), 0);
+    editor.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        closeEditor();
+      }
+    });
   }
 
   /** The unit, so a row of bare blocks still says what it counts. */
@@ -379,5 +527,5 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
     load();
   }
 
-  return { load, step, toggleToday, submit, addHabit };
+  return { load, step, toggleToday, submit, addHabit, closeEditor };
 }

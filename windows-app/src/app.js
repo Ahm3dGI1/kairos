@@ -675,6 +675,17 @@ function setPage(page) {
     dom[`page-${name}`].classList.toggle('active', name === page);
     dom[`${name}-page`].hidden = name !== page;
   }
+
+  // No page inherits the last one's status line. Each writes its own as it
+  // loads, and a page that writes nothing should show nothing rather than
+  // whatever the page before it left there — which is how the workout page's
+  // "start session" button ended up sitting above the habit grid.
+  clear(dom['status-tools']);
+  dom.here.textContent = TITLES[page] ?? '';
+  dom.count.textContent = '';
+  // The habit editor floats above everything, so leaving the page has to
+  // take it with you — a click elsewhere closes it, but a number key does not.
+  habits.closeEditor();
   dom.detail.hidden = page !== 'agenda';
   dom['capture-hint'].textContent = HINTS[page];
   // The bar captures a task on two pages and a journal line on the third;

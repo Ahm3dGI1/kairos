@@ -121,6 +121,11 @@ every device is independent.
 - **A task can be a habit.** "Gym" is both a thing to do five times a week and
   a thing to have a run of; link them from the detail pane and completing the
   task ticks the habit for that day.
+- **Editing a habit** — click its name: rename it, change what it records and
+  in what unit, archive it or delete it. Changing what it records leaves the
+  numbers already entered alone. Archiving takes the row off the grid and
+  keeps the history, and archived habits sit under the grid so there is a way
+  back; deleting takes the ticks with it.
 - **Prayer times** — the five prayers and sunrise for any day, with the next
   one counted down. Nothing is fetched: a prayer time is a statement about
   where the sun is, and that follows from the date and a pair of coordinates,

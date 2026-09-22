@@ -102,6 +102,8 @@ pub struct HabitMonth {
     label: String,
     days: Vec<DayColumn>,
     habits: Vec<HabitRow>,
+    /// Retired habits, so archiving is not a one-way door.
+    archived: Vec<HabitBrief>,
 }
 
 fn last_day_of_month(year: i32, month: u32) -> u32 {
@@ -133,13 +135,15 @@ pub fn habit_month(state: State<'_, AppState>, year: i32, month: u32) -> CmdResu
     let last =
         NaiveDate::from_ymd_opt(year, month, last_day_of_month(year, month)).ok_or("bad month")?;
 
-    let (habits, logs, streaks) = read_store(&state, |store| {
-        Ok((
-            store.habits(false)?,
-            store.day_logs_between(first, last)?,
-            store.habit_streaks(today)?,
-        ))
+    let (all, logs, streaks) = read_store(&state, |store| {
+        Ok((store.habits(true)?, store.day_logs_between(first, last)?, store.habit_streaks(today)?))
     })?;
+    let archived: Vec<HabitBrief> = all
+        .iter()
+        .filter(|h| h.archived)
+        .map(|h| HabitBrief { id: h.id, name: h.name.clone(), kind: h.kind.label() })
+        .collect();
+    let habits: Vec<_> = all.into_iter().filter(|h| !h.archived).collect();
 
     let by_date: std::collections::HashMap<NaiveDate, &DayLog> =
         logs.iter().map(|log| (log.date, log)).collect();
@@ -207,6 +211,7 @@ pub fn habit_month(state: State<'_, AppState>, year: i32, month: u32) -> CmdResu
         month,
         days,
         habits: habit_rows,
+        archived,
     })
 }
 
@@ -246,7 +251,7 @@ pub fn add_habit(
 }
 
 /// Just the habits, for anywhere that needs to name one — the detail pane's
-/// link picker, mainly.
+/// link picker, and the archived list on the habit page.
 #[derive(Serialize)]
 pub struct HabitBrief {
     id: HabitId,
@@ -264,20 +269,34 @@ pub fn habits(state: State<'_, AppState>) -> CmdResult<Vec<HabitBrief>> {
 }
 
 #[tauri::command]
-pub fn rename_habit(
+pub fn edit_habit(
     app: AppHandle,
     state: State<'_, AppState>,
     id: HabitId,
-    name: String,
+    name: Option<String>,
+    kind: Option<String>,
+    archived: Option<bool>,
 ) -> CmdResult<()> {
-    if name.trim().is_empty() {
-        return Ok(());
-    }
     with_store(&app, &state, |store| {
         let Some(mut habit) = store.habits(true)?.into_iter().find(|h| h.id == id) else {
             return Ok(());
         };
-        habit.name = name.trim().to_string();
+        if let Some(name) = name {
+            // A habit with no name could not be found again, so an emptied
+            // box leaves the name alone rather than applying itself.
+            if !name.trim().is_empty() {
+                habit.name = name.trim().to_string();
+            }
+        }
+        // Existing entries are left as they are. A number read as a duration
+        // is still the same number, and losing a month of history to a
+        // mistaken tap would be worse than an odd-looking cell.
+        if let Some(kind) = kind {
+            habit.kind = daily::HabitKind::parse(&kind);
+        }
+        if let Some(archived) = archived {
+            habit.archived = archived;
+        }
         store.save_habit(&habit)
     })
 }
@@ -309,25 +328,6 @@ pub fn set_habit_value(
         // recorded zero — the difference between "did not measure" and "none".
         log.set_value(id, habit.kind.parse_value(&value));
         store.save_day_log(&log)
-    })
-}
-
-/// Changes what a habit records. Existing entries are left alone: a number
-/// read as a duration is still the same number, and losing a month of history
-/// to a mistaken tap on a dropdown would be worse than an odd-looking cell.
-#[tauri::command]
-pub fn set_habit_kind(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: HabitId,
-    kind: String,
-) -> CmdResult<()> {
-    with_store(&app, &state, |store| {
-        let Some(mut habit) = store.habits(true)?.into_iter().find(|h| h.id == id) else {
-            return Ok(());
-        };
-        habit.kind = daily::HabitKind::parse(&kind);
-        store.save_habit(&habit)
     })
 }
 

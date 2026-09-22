@@ -2119,3 +2119,93 @@ select {
   width: 120px;
   text-align: right;
 }
+
+/* ---- the habit editor ----
+   Fixed to the viewport, because the grid it belongs to scrolls sideways and
+   would otherwise clip it. */
+
+.habit-editor {
+  width: 250px;
+  z-index: 40;
+}
+
+.habit-editor .pop-field {
+  margin-bottom: 8px;
+}
+
+.habit-editor .pop-field input {
+  width: 100%;
+}
+
+.habit-editor .pop-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.habit-editor .pop-row-end {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  justify-content: flex-end;
+}
+
+/* The habit's name is the way into its editor, so it has to look pressable
+   without becoming a button in the middle of a data grid. */
+.habit-name .n {
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.habit-name .n:hover {
+  border-bottom-color: var(--edge);
+}
+
+.habit-name .n:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Where an archived habit went, so archiving is not a one-way door. */
+.archived-habits {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-faint);
+}
+
+.archived-habits .label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-ghost);
+}
+
+.archived-habits .restore {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-fainter);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.archived-habits .restore:hover {
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--edge);
+}
