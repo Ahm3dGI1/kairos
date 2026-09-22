@@ -5,7 +5,7 @@
 // that is always there and never a modal.
 
 import { createCapture } from './capture.js';
-import { refreshHabits, renderDetail } from './detail.js';
+import { dismissPopovers, refreshHabits, renderDetail } from './detail.js';
 import { createHabits } from './habits.js';
 import { createPrayer } from './prayer.js';
 import { createSettings } from './settings.js';
@@ -724,6 +724,11 @@ document.addEventListener('keydown', (event) => {
   const typing = takesKeys(event.target);
 
   if (event.key === 'Escape') {
+    // The thing in front goes first: a popover, then the field, then the pane.
+    if (dismissPopovers(dom.detail)) {
+      event.preventDefault();
+      return;
+    }
     if (typing) {
       event.target.blur();
       if (event.target.classList?.contains('search')) {

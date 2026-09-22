@@ -56,16 +56,51 @@ function daysIn(label) {
   return DAYS.filter(([name]) => words.includes(name)).map(([name]) => name);
 }
 
+/**
+ * Which popover should be put back after the pane re-renders.
+ *
+ * Most popovers close themselves once they have taken an answer. The day
+ * picker does not: picking three weekdays is three clicks, and each one saves,
+ * and each save re-renders the pane underneath — which used to take the panel
+ * with it and mean reopening it for every day. Marking it sticky lets the
+ * re-render restore it. Cleared whenever a popover is closed deliberately, so
+ * only an edit brings it back, never an Escape.
+ *
+ * The key carries the task's id: closing the pane and opening a different
+ * task should not inherit whatever panel the last one had open.
+ */
+let sticky = null;
+
 function closePops(root) {
+  sticky = null;
   for (const pop of root.querySelectorAll('.pop')) pop.remove();
 }
 
-/** Opens a popover anchored under `anchor`, inside the pane. */
-function openPop(root, anchor, build) {
+/**
+ * Closes any open popover, reporting whether there was one.
+ *
+ * Escape should reach the panel in front before the pane behind it. Without
+ * this the day picker — which stays open on purpose — could only be dismissed
+ * by finding its chip again.
+ */
+export function dismissPopovers(root) {
+  const open = root.querySelector('.pop') !== null;
+  closePops(root);
+  return open;
+}
+
+/**
+ * Opens a popover anchored under `anchor`, inside the pane.
+ *
+ * `key` names a popover that should come back after a re-render — see
+ * [`sticky`]. Clicking the same chip again closes it, as before.
+ */
+function openPop(root, anchor, build, key = null) {
   const existing = root.querySelector('.pop');
   const sameOwner = existing?._owner === anchor;
   closePops(root);
   if (sameOwner) return;
+  sticky = key;
 
   const pop = el('div', { class: 'pop' });
   pop._owner = anchor;
@@ -310,7 +345,7 @@ export function renderDetail(root, task, { todayDate, actions }) {
       if (current && !REPEATS.some(([value]) => value === current) && !chosen.size) {
         pop.appendChild(el('p', { class: 'pop-note', text: `now: ${current}` }));
       }
-    }),
+    }, `repeat:${task.id}`),
   );
   chips.appendChild(repeatChip);
 
@@ -496,6 +531,11 @@ export function renderDetail(root, task, { todayDate, actions }) {
   // Sizing needs the nodes in the document.
   autosize();
   sizeNote();
+
+  // The day picker saves on every click, and every save lands here. Reopening
+  // it reads the days back out of the rule that was just saved, so the keys
+  // show what is actually stored rather than what the panel remembered.
+  if (sticky === `repeat:${task.id}`) repeatChip.click();
 
   // A click anywhere that is not a chip or a popover dismisses the picker.
   root.addEventListener('mousedown', (event) => {
