@@ -1,5 +1,4 @@
 pub mod daily;
-pub mod prayer;
 pub mod settings;
 pub mod tasks;
 pub mod workout;

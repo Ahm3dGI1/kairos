@@ -23,7 +23,6 @@ Try it: `cargo run -p kairos-core --example try_parse -- "gym every day 5pm"`
 | `filter.rs` | the saved views, and the narrowing a list applies on top of them |
 | `daily.rs` | habits, their kinds, streaks, and the month journal |
 | `workout.rs` | routines, exercises, sessions and sets |
-| `prayer.rs` | prayer times, from the date and a pair of coordinates |
 | `settings.rs` | every switch a client should offer, described so it can render them |
 
 ## The two things worth knowing

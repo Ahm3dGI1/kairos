@@ -14,8 +14,6 @@ pub struct Settings {
     pub habits_page: bool,
     /// Show the workout book in the rail.
     pub workout_page: bool,
-    /// Show prayer times in the rail.
-    pub prayer_page: bool,
     /// Show the lists sidebar inside Tasks.
     pub lists_sidebar: bool,
 
@@ -51,16 +49,6 @@ pub struct Settings {
     // Appearance
     pub theme: Theme,
 
-    // Prayer times
-    /// Degrees north. Zero means unset, which is what the page says.
-    pub prayer_latitude: f64,
-    /// Degrees east.
-    pub prayer_longitude: f64,
-    /// Which convention fixes the Fajr and Isha angles.
-    pub prayer_method: String,
-    /// "standard" or "hanafi" — which shadow length marks Asr.
-    pub prayer_asr: String,
-
     // Storage
     /// Mirror everything into plain-text files, and read external edits back.
     pub vault_enabled: bool,
@@ -74,7 +62,6 @@ impl Default for Settings {
             calendar_page: true,
             habits_page: true,
             workout_page: true,
-            prayer_page: false,
             lists_sidebar: true,
             parse_pills: true,
             global_hotkey: true,
@@ -88,10 +75,6 @@ impl Default for Settings {
             show_completed: false,
             week_starts_monday: true,
             theme: Theme::System,
-            prayer_latitude: 0.0,
-            prayer_longitude: 0.0,
-            prayer_method: crate::prayer::Method::default().key().to_string(),
-            prayer_asr: crate::prayer::Asr::default().key().to_string(),
             vault_enabled: true,
             vault_path: String::new(),
         }
@@ -118,10 +101,6 @@ pub enum SettingKind {
     },
     /// A filesystem path, with a placeholder describing the empty default.
     Path {
-        placeholder: String,
-    },
-    /// A number, sent back as a number rather than a string.
-    Number {
         placeholder: String,
     },
 }
@@ -153,8 +132,6 @@ const SCHEMA: &[(&str, &str, &str, &str, bool)] = &[
      "The habit month and the journal beside it.", false),
     ("workout_page", "Pages", "Workout",
      "Routines, exercises and the session grid.", false),
-    ("prayer_page", "Pages", "Prayer times",
-     "The day's prayer times, worked out from your coordinates. Off by default because it needs them.", false),
     ("lists_sidebar", "Pages", "Lists sidebar",
      "A second sidebar inside Tasks holding every project and tag in use.", false),
 
@@ -186,14 +163,6 @@ const SCHEMA: &[(&str, &str, &str, &str, bool)] = &[
     ("theme", "Appearance", "Theme",
      "System follows Windows.", false),
 
-    ("prayer_latitude", "Prayer times", "Latitude",
-     "Degrees north of the equator; negative for south. Times are computed from this, never fetched, so the page works with no network.", false),
-    ("prayer_longitude", "Prayer times", "Longitude",
-     "Degrees east of Greenwich; negative for west.", false),
-    ("prayer_method", "Prayer times", "Calculation method",
-     "Conventions differ only in how far below the horizon the sun must be for Fajr and Isha. Umm al-Qura instead puts Isha ninety minutes after Maghrib.", false),
-    ("prayer_asr", "Prayer times", "Asr",
-     "Standard is a shadow the length of the object; Hanafi waits for twice that.", false),
 
     ("vault_enabled", "Storage", "Plain-text vault",
      "Mirror every task, habit and workout into readable files you can edit in any editor. The files are the real data; the database is a rebuildable index.", true),
@@ -262,37 +231,10 @@ impl Settings {
             _ => serde_json::Map::new(),
         }
     }
-
-    /// Where the prayer page computes for.
-    pub fn location(&self) -> crate::prayer::Location {
-        crate::prayer::Location::new(self.prayer_latitude, self.prayer_longitude)
-    }
-
-    /// The two conventions the prayer page follows.
-    pub fn prayer_params(&self) -> crate::prayer::Params {
-        crate::prayer::Params {
-            method: crate::prayer::Method::parse(&self.prayer_method),
-            asr: crate::prayer::Asr::parse(&self.prayer_asr),
-        }
-    }
 }
 
 fn kind_of(key: &str) -> SettingKind {
     match key {
-        "prayer_latitude" => SettingKind::Number { placeholder: "21.4225".into() },
-        "prayer_longitude" => SettingKind::Number { placeholder: "39.8262".into() },
-        "prayer_method" => SettingKind::Choice {
-            options: crate::prayer::Method::all()
-                .into_iter()
-                .map(|m| (m.key().to_string(), m.label().to_string()))
-                .collect(),
-        },
-        "prayer_asr" => SettingKind::Choice {
-            options: vec![
-                ("standard".into(), "Standard (Shafi'i, Maliki, Hanbali)".into()),
-                ("hanafi".into(), "Hanafi".into()),
-            ],
-        },
         "theme" => SettingKind::Choice {
             options: vec![
                 ("system".into(), "System".into()),

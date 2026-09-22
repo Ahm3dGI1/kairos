@@ -79,7 +79,6 @@ fn main() {
             commands::workout::save_set,
             commands::workout::save_session_note,
             commands::workout::delete_session,
-            commands::prayer::prayer_day,
             commands::settings::settings,
             commands::settings::settings_values,
             commands::settings::set_setting,

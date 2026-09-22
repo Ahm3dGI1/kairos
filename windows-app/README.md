@@ -126,13 +126,6 @@ independent, and a vault in a synced folder covers most of what sync would.
   numbers already entered alone. Archiving takes the row off the grid and
   keeps the history, and archived habits sit under the grid so there is a way
   back; deleting takes the ticks with it.
-- **Prayer times** — the five prayers and sunrise for any day, with the next
-  one counted down. Nothing is fetched: a prayer time is a statement about
-  where the sun is, and that follows from the date and a pair of coordinates,
-  so the page is arithmetic and works with no network at all. Seven
-  calculation methods, both Asr conventions, and an honest blank where a
-  northern summer leaves the sun too high for Fajr or Isha to have an angle.
-  Off by default, because it needs coordinates first.
 - **Search** across titles, notes, subtasks, tags and projects.
 - **Undo and redo** for completions, deletions and edits, both backed by logs in
   the database, so they survive a restart. A fresh edit discards the redo stack,
@@ -197,7 +190,7 @@ The app is keyboard-first; the mouse is optional everywhere.
 | `Y` or `Ctrl+Shift+Z` | redo |
 | `S` | start today's session (Workout) |
 | `W` | toggle the sticky note |
-| `1`–`6` | Tasks, Calendar, Habits, Workout, Prayer, Settings |
+| `1`–`5` | Tasks, Calendar, Habits, Workout, Settings |
 | `Esc` | close the pane, clear the search, dismiss the overlay |
 | `Ctrl+Shift+Space` | quick-add overlay, from anywhere in Windows |
 
@@ -219,7 +212,6 @@ src/                 frontend — no build step
   capture.js           the capture field: parse pills and backspace-to-revert
   detail.js            the detail pane, its date and priority pickers
   habits.js            the habit month grid and the month journal
-  prayer.js            the prayer page
   settings.js          the settings page, rendered from the core's descriptions
   workout.js           routines, exercises and the session grid
   quick-add.html/.js   the hotkey overlay, sharing capture.js
@@ -234,7 +226,6 @@ src-tauri/
     tasks.rs             capture, edit, complete, undo
     daily.rs             habits and the month journal
     workout.rs           the workout book
-    prayer.rs            the day's prayer times
     settings.rs          the switches, and the vault's controls
   src/shell.rs         tray, global hotkey, window management
   src/state.rs         the shared store, the vault, and the data-changed event
