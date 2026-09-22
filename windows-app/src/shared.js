@@ -24,7 +24,7 @@ export function toIso(date) {
 const DAY_MS = 86400000;
 
 /** Days from `today` to `iso`, negative for the past. */
-export function daysUntil(iso, todayDate) {
+function daysUntil(iso, todayDate) {
   const date = parseDate(iso);
   if (!date) return null;
   return Math.round((date - todayDate) / DAY_MS);
@@ -80,16 +80,11 @@ export function clear(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
-/** Priority -> the class suffix used for its dot and border. */
-export function priorityClass(priority) {
-  return priority && priority !== 'None' ? `p-${String(priority).toLowerCase()}` : '';
-}
-
 /**
  * Surfaces an error where the user can see it rather than only in the console.
  * Every command call goes through this, so a failed write is never silent.
  */
-export function reportError(where, error) {
+function reportError(where, error) {
   console.error(where, error);
   const bar = document.getElementById('error-bar');
   if (!bar) return;

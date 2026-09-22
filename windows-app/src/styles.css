@@ -323,12 +323,6 @@ select {
 
 /* The tools keep the same rhythm as the rest of the line. */
 #status-tools,
-.status .filters {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .status button {
   border: 0;
   background: transparent;
@@ -1405,10 +1399,6 @@ select {
 
 @media (max-width: 520px) {
   .status .search,
-  .status .filters {
-    display: none;
-  }
-
   .task .meta .extra {
     display: none;
   }
@@ -2208,4 +2198,66 @@ select {
   color: var(--text);
   border-style: solid;
   border-color: var(--edge);
+}
+
+/* ---- session notes, and deleting a routine ----
+   Both follow the pattern already on this page: an affordance that stays out
+   of the way until the row is hovered. */
+
+.workout-grid {
+  position: relative;
+}
+
+.wcell.head .note {
+  border: 0;
+  background: transparent;
+  color: var(--text-quiet);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.wcell.head:hover .note {
+  opacity: 1;
+}
+
+/* A session that has a note says so without being hovered — otherwise the
+   note is written once and never seen again. */
+.wcell.head .note.on {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.note-input {
+  position: absolute;
+  z-index: 6;
+  width: 180px;
+  padding: 4px 6px;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-max);
+  background: var(--raised);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  outline: none;
+}
+
+.list-row .x {
+  border: 0;
+  background: transparent;
+  color: var(--text-quiet);
+  font-size: 10px;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.list-row:hover .x {
+  opacity: 1;
+}
+
+.list-row .x:hover {
+  color: var(--danger);
 }

@@ -78,9 +78,9 @@ gh release create v0.1.0 \
 ```
 
 Releases are free for public repos, need no infrastructure, and give a stable
-download URL. [`/sync-server`](../sync-server) is the only part of the project
-that will ever need somewhere to run, and it is not built yet — until then,
-every device is independent.
+download URL. A sync server is the only part of the project that will ever
+need somewhere to run, and it is not built — until then, every device is
+independent, and a vault in a synced folder covers most of what sync would.
 
 ## What it does
 
@@ -229,17 +229,22 @@ src/                 frontend — no build step
   overlay.css          the two frameless windows
 src-tauri/
   src/main.rs          builder, plugins, the IPC surface
-  src/commands.rs      commands — thin wrappers over the core
-  src/workout_commands.rs  the workout book
-  src/settings_commands.rs  the switches, and the vault's controls
+  src/commands/        thin wrappers over the core, one file per page
+    mod.rs               what they share: the store lock, the task view
+    tasks.rs             capture, edit, complete, undo
+    daily.rs             habits and the month journal
+    workout.rs           the workout book
+    prayer.rs            the day's prayer times
+    settings.rs          the switches, and the vault's controls
   src/shell.rs         tray, global hotkey, window management
+  src/state.rs         the shared store, the vault, and the data-changed event
   src/watcher.rs       noticing that someone edited the vault
-  src/state.rs         the shared store, and the tasks-changed event
+  src/reminders.rs     the due-time poll and the tray tooltip
   tauri.conf.json      windows, CSP, bundle
   capabilities/        Tauri v2 permissions
 ```
 
-All three windows share one open `Store` and re-read on a `tasks-changed`
+All three windows share one open `Store` and re-read on a `data-changed`
 event, so completing something in the widget updates the main list instantly.
 
 ## Data
@@ -297,4 +302,5 @@ again.
 - Per-task reminder offsets ("15 minutes before"); reminders fire at the due
   time itself
 - Drag-and-drop reordering, and manual sort orders
-- Sync (waiting on [`/sync-server`](../sync-server))
+- Sync between devices. Putting the vault in a synced folder or a git repo
+  gets most of the way there in the meantime.

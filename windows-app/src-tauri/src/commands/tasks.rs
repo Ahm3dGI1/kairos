@@ -1,83 +1,12 @@
-//! The commands the frontend calls.
-//!
-//! Every one of these is a thin shell over `kairos-core`: parse a line, read a
-//! view, write a change, emit "tasks-changed". No task semantics live here —
-//! that is the core's job, and duplicating any of it would put the Windows app
-//! and a future Linux client out of step.
+//! Capturing, editing and completing tasks.
 
 use chrono::{Datelike, Local, NaiveDate};
-use kairos_core::{parse_excluding, recur, Field, Filter, Priority, Sort, Store, Task, TaskId};
+use kairos_core::{parse_excluding, recur, Field, Filter, Priority, Sort, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
-use crate::state::{notify_changed, AppState};
-
-/// Commands report failure as a string: the frontend shows it and moves on,
-/// and there is nothing it could do differently with a richer type.
-pub type CmdResult<T> = Result<T, String>;
-
-pub fn today() -> NaiveDate {
-    Local::now().date_naive()
-}
-
-/// A task plus the things the UI would otherwise recompute per row.
-#[derive(Serialize)]
-pub struct TaskView {
-    #[serde(flatten)]
-    task: Task,
-    /// The next date this actually happens, following the recurrence rule.
-    next: Option<NaiveDate>,
-    overdue: bool,
-    /// "every other friday", for the row's subtitle.
-    recurrence_label: Option<String>,
-    /// How many subtasks are done, for the "2/5" badge.
-    subtasks_done: usize,
-    /// "all" or "one-per-occurrence".
-    checklist: &'static str,
-}
-
-impl TaskView {
-    pub fn new(task: Task, today: NaiveDate) -> Self {
-        Self {
-            next: if task.is_recurring() {
-                recur::next_occurrence(&task, today).or(task.due)
-            } else {
-                task.due
-            },
-            overdue: task.is_overdue(today),
-            recurrence_label: task.recurrence.map(|r| r.describe()),
-            subtasks_done: task.subtasks.iter().filter(|s| s.done).count(),
-            checklist: task.checklist.label(),
-            task,
-        }
-    }
-}
-
-/// Runs `f` with the store locked, then tells every window to refresh.
-pub fn with_store<T>(
-    app: &AppHandle,
-    state: &State<'_, AppState>,
-    f: impl FnOnce(&mut Store) -> Result<T, kairos_core::StoreError>,
-) -> CmdResult<T> {
-    let mut store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
-    let out = f(&mut store).map_err(|e| e.to_string())?;
-    drop(store);
-    // The files are the record, so a change is not really made until they say
-    // so. This is the one place every mutation passes through, which is why
-    // the mirror lives here rather than in each command.
-    crate::state::export(state);
-    notify_changed(app);
-    Ok(out)
-}
-
-/// Reads from the store without announcing a change.
-pub fn read_store<T>(
-    state: &State<'_, AppState>,
-    f: impl FnOnce(&Store) -> Result<T, kairos_core::StoreError>,
-) -> CmdResult<T> {
-    let store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
-    f(&store).map_err(|e| e.to_string())
-}
+use super::{read_store, today, with_store, CmdResult, TaskView};
+use crate::state::AppState;
 
 #[tauri::command]
 pub fn list_tasks(
@@ -88,13 +17,6 @@ pub fn list_tasks(
     let today = today();
     let tasks = read_store(&state, |s| s.query(&filter, sort, today))?;
     Ok(tasks.into_iter().map(|t| TaskView::new(t, today)).collect())
-}
-
-#[tauri::command]
-pub fn get_task(state: State<'_, AppState>, id: TaskId) -> CmdResult<Option<TaskView>> {
-    let today = today();
-    let task = read_store(&state, |s| s.get(id))?;
-    Ok(task.map(|t| TaskView::new(t, today)))
 }
 
 /// A stretch of the input the parser claimed, so the capture field can outline
@@ -413,16 +335,6 @@ pub fn redo(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<Undo
 }
 
 #[tauri::command]
-pub fn can_undo(state: State<'_, AppState>) -> CmdResult<bool> {
-    read_store(&state, |s| s.can_undo())
-}
-
-#[tauri::command]
-pub fn can_redo(state: State<'_, AppState>) -> CmdResult<bool> {
-    read_store(&state, |s| s.can_redo())
-}
-
-#[tauri::command]
 pub fn projects(state: State<'_, AppState>) -> CmdResult<Vec<String>> {
     read_store(&state, |s| s.projects())
 }
@@ -495,30 +407,6 @@ pub fn summary(state: State<'_, AppState>) -> CmdResult<String> {
         (n, 0) => format!("{n} due today"),
         (n, o) => format!("{n} due today, {o} overdue"),
     })
-}
-
-/// How many open tasks each sidebar view holds, computed in one pass so the
-/// sidebar costs one call rather than one per view.
-#[tauri::command]
-pub fn view_counts(
-    state: State<'_, AppState>,
-) -> CmdResult<std::collections::HashMap<String, usize>> {
-    let today = today();
-    let tasks = read_store(&state, |s| s.all())?;
-
-    let views: [(&str, Filter); 5] = [
-        ("today", Filter::Today),
-        ("next7", Filter::Next { days: 7 }),
-        ("all", Filter::All),
-        ("overdue", Filter::Overdue),
-        ("inbox", Filter::Inbox),
-    ];
-    let mut counts = std::collections::HashMap::new();
-    for (name, filter) in views {
-        let n = tasks.iter().filter(|t| filter.matches(t, today)).count();
-        counts.insert(name.to_string(), n);
-    }
-    Ok(counts)
 }
 
 /// The current month, for the calendar's initial render.

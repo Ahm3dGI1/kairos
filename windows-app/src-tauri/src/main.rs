@@ -8,14 +8,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
-mod daily_commands;
-mod prayer_commands;
 mod reminders;
-mod settings_commands;
 mod shell;
 mod state;
 mod watcher;
-mod workout_commands;
 
 fn main() {
     tauri::Builder::default()
@@ -40,7 +36,7 @@ fn main() {
             // that stops reminding you. Quit is on the tray menu.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Unless the user asked for the X to mean what it says.
-                if !settings_commands::current(window.app_handle()).close_to_tray {
+                if !commands::settings::current(window.app_handle()).close_to_tray {
                     return;
                 }
                 api.prevent_close();
@@ -48,60 +44,55 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            commands::list_tasks,
-            commands::get_task,
-            commands::preview_line,
-            commands::quick_add,
-            commands::complete_task,
-            commands::uncomplete_task,
-            commands::delete_task,
-            commands::update_task,
-            commands::add_subtask,
-            commands::toggle_subtask,
-            commands::skip_occurrence,
-            commands::reschedule_occurrence,
-            commands::undo,
-            commands::redo,
-            commands::can_undo,
-            commands::can_redo,
-            commands::projects,
-            commands::tags,
-            commands::calendar_month,
-            commands::today_date,
-            commands::summary,
-            commands::current_month,
-            commands::view_counts,
-            daily_commands::agenda,
-            daily_commands::habit_month,
-            daily_commands::toggle_habit,
-            daily_commands::add_habit,
-            daily_commands::habits,
-            daily_commands::edit_habit,
-            daily_commands::delete_habit,
-            daily_commands::set_habit_value,
-            daily_commands::month_journal,
-            daily_commands::save_journal_entry,
-            daily_commands::delete_journal_entry,
-            daily_commands::current_month_pair,
-            workout_commands::workout_page,
-            workout_commands::add_routine,
-            workout_commands::rename_routine,
-            workout_commands::delete_routine,
-            workout_commands::add_exercise,
-            workout_commands::rename_exercise,
-            workout_commands::delete_exercise,
-            workout_commands::start_session,
-            workout_commands::save_set,
-            workout_commands::save_session_note,
-            workout_commands::delete_session,
-            prayer_commands::prayer_day,
-            settings_commands::settings,
-            settings_commands::settings_values,
-            settings_commands::set_setting,
-            settings_commands::vault_info,
-            settings_commands::reload_vault,
-            settings_commands::rewrite_vault,
-            settings_commands::open_vault,
+            commands::tasks::list_tasks,
+            commands::tasks::preview_line,
+            commands::tasks::quick_add,
+            commands::tasks::complete_task,
+            commands::tasks::uncomplete_task,
+            commands::tasks::delete_task,
+            commands::tasks::update_task,
+            commands::tasks::add_subtask,
+            commands::tasks::toggle_subtask,
+            commands::tasks::skip_occurrence,
+            commands::tasks::reschedule_occurrence,
+            commands::tasks::undo,
+            commands::tasks::redo,
+            commands::tasks::projects,
+            commands::tasks::tags,
+            commands::tasks::calendar_month,
+            commands::tasks::today_date,
+            commands::tasks::summary,
+            commands::tasks::current_month,
+            commands::daily::agenda,
+            commands::daily::habit_month,
+            commands::daily::toggle_habit,
+            commands::daily::add_habit,
+            commands::daily::habits,
+            commands::daily::edit_habit,
+            commands::daily::delete_habit,
+            commands::daily::set_habit_value,
+            commands::daily::month_journal,
+            commands::daily::save_journal_entry,
+            commands::daily::current_month_pair,
+            commands::workout::workout_page,
+            commands::workout::add_routine,
+            commands::workout::rename_routine,
+            commands::workout::delete_routine,
+            commands::workout::add_exercise,
+            commands::workout::rename_exercise,
+            commands::workout::delete_exercise,
+            commands::workout::start_session,
+            commands::workout::save_set,
+            commands::workout::save_session_note,
+            commands::workout::delete_session,
+            commands::prayer::prayer_day,
+            commands::settings::settings,
+            commands::settings::settings_values,
+            commands::settings::set_setting,
+            commands::settings::vault_info,
+            commands::settings::reload_vault,
+            commands::settings::rewrite_vault,
+            commands::settings::open_vault,
             shell::hide_window,
             shell::toggle_widget_command,
             shell::show_main_window,

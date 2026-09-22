@@ -25,7 +25,7 @@ const QUICK_ADD_HOTKEY: (Modifiers, Code) =
     (Modifiers::CONTROL.union(Modifiers::SHIFT), Code::Space);
 
 pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let settings = crate::settings_commands::current(app);
+    let settings = crate::commands::settings::current(app);
     build_auxiliary_windows(app)?;
     // The tray and the hotkey claim things outside the app — an icon in the
     // notification area, a key combination the whole system routes here — so
@@ -180,7 +180,7 @@ pub fn toggle_quick_add(app: &AppHandle) {
 }
 
 pub fn toggle_widget(app: &AppHandle) {
-    if !crate::settings_commands::current(app).sticky_note {
+    if !crate::commands::settings::current(app).sticky_note {
         return;
     }
     let Some(window) = app.get_webview_window("widget") else { return };

@@ -48,17 +48,17 @@ The Windows frontend is deliberately plain HTML/CSS/ES modules — no npm, no bu
 ## Repo structure
 
 Monorepo — one maintainer, one shared core, so a parsing fix lands everywhere in one PR. Split into
-separate repos only if independent maintainers take over a platform. `/core` and `/windows-app`
-are built; the rest are README stubs.
+separate repos only if independent maintainers take over a platform.
 
 ```
 /core          task model, NL parsing, recurrence, vault, store   (crate kairos-core)
 /windows-app   Tauri shell: tray, widget, hotkey, calendar, UI    (crate kairos-windows)
-/linux-app     terminal client                                       (future)
-/mobile-app    React Native or Flutter client                        (future)
-/sync-server   self-hostable sync backend
-/docs          spec and project documentation
+/docs          the spec, and the design boards the shell is built against
 ```
+
+A Linux client, mobile clients and a sync server are planned; they get directories when they get
+code. What each is meant to be is in the spec (§3, §6), which is one place rather than three
+empty ones.
 
 ## Build / test / lint
 

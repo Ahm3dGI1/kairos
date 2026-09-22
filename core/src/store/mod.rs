@@ -975,8 +975,15 @@ impl Store {
     }
 
     /// Writes a month page, or removes it once every entry has been emptied.
+    /// Writes a month's journal, dropping any entry left blank.
+    ///
+    /// Clearing an entry is how you delete one, which is the same bargain the
+    /// rest of the app makes: an emptied habit cell records nothing, an
+    /// emptied set did not happen, a day with nothing on it keeps no row.
     pub fn save_month_journal(&mut self, journal: &MonthJournal) -> Result<()> {
-        self.write_month_journal(journal)
+        let mut journal = journal.clone();
+        journal.prune();
+        self.write_month_journal(&journal)
     }
 
     fn write_month_journal(&self, journal: &MonthJournal) -> Result<()> {

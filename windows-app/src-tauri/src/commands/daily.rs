@@ -9,7 +9,7 @@ use kairos_core::{agenda, daily, DayLog, HabitId, JournalEntry, MonthJournal, Na
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
-use crate::commands::{read_store, today, with_store, CmdResult, TaskView};
+use super::{read_store, today, with_store, CmdResult, TaskView};
 use crate::state::AppState;
 
 // ---------- the agenda ----------
@@ -367,22 +367,6 @@ pub fn save_journal_entry(
                 journal.entries.push(fresh);
             }
         }
-        store.save_month_journal(&journal)?;
-        store.month_journal(year, month)
-    })
-}
-
-#[tauri::command]
-pub fn delete_journal_entry(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    year: i32,
-    month: u32,
-    id: uuid::Uuid,
-) -> CmdResult<MonthJournal> {
-    with_store(&app, &state, |store| {
-        let mut journal = store.month_journal(year, month)?;
-        journal.entries.retain(|entry| entry.id != id);
         store.save_month_journal(&journal)?;
         store.month_journal(year, month)
     })

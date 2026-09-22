@@ -23,6 +23,47 @@ export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) 
     renderGrid();
   }
 
+  /**
+   * Edits a session's note, in a field floated over its column.
+   *
+   * The column is two cells wide and holds a date, which leaves no room for
+   * the note itself — so the button says whether there is one and opens it.
+   */
+  function editNote(session, anchor) {
+    gridNode.querySelector('.note-input')?.remove();
+    const input = el('input', {
+      class: 'note-input',
+      type: 'text',
+      value: session.note ?? '',
+      placeholder: 'how it went',
+      spellcheck: 'false',
+    });
+    input.style.left = `${anchor.offsetLeft - 80}px`;
+    input.style.top = `${anchor.offsetTop + 22}px`;
+    gridNode.appendChild(input);
+    input.focus();
+    input.select();
+
+    let closed = false;
+    const commit = async (save) => {
+      if (closed) return;
+      closed = true;
+      const note = input.value;
+      input.remove();
+      if (!save || note === (session.note ?? '')) return;
+      await call('save_session_note', { session: session.id, note }, 'Session note');
+      load();
+    };
+    input.addEventListener('blur', () => commit(true));
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') commit(true);
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        commit(false);
+      }
+    });
+  }
+
   function select(id) {
     routineId = id;
     load();
@@ -42,6 +83,23 @@ export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) 
       }, [
         el('span', { class: 'name', text: routine.name }),
         el('span', { class: 'n', text: String(routine.sessions) }),
+        el('button', {
+          type: 'button',
+          class: 'x',
+          text: '✕',
+          title: 'Delete this routine and every session of it',
+          onclick: async (event) => {
+            event.stopPropagation();
+            const count = routine.sessions;
+            const warning = count
+              ? `Delete "${routine.name}" and its ${count} session${count === 1 ? '' : 's'}?`
+              : `Delete "${routine.name}"?`;
+            if (!window.confirm(warning)) return;
+            await call('delete_routine', { id: routine.id }, 'Delete routine');
+            if (routine.id === routineId) routineId = null;
+            load();
+          },
+        }),
       ]);
 
       // Double-click renames, matching the habit rows.
@@ -106,6 +164,13 @@ export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) 
           title: session.note || session.label,
         }, [
           el('span', { text: session.is_today ? 'today' : session.label }),
+          el('button', {
+            type: 'button',
+            class: `note ${session.note ? 'on' : ''}`.trim(),
+            title: session.note || 'Add a note to this session',
+            text: '·',
+            onclick: (event) => editNote(session, event.currentTarget),
+          }),
           el('button', {
             type: 'button',
             class: 'x',

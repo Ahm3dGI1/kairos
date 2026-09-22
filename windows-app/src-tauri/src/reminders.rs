@@ -48,7 +48,7 @@ fn tick(app: &AppHandle) {
     // hover it — so it keeps working either way.
     update_tooltip(app);
 
-    if !crate::settings_commands::current(app).reminders {
+    if !crate::commands::settings::current(app).reminders {
         return;
     }
 

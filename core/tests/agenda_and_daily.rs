@@ -312,3 +312,33 @@ fn pruning_drops_only_the_blank_entries() {
     journal.prune();
     assert_eq!(journal.entries, vec![kept]);
 }
+
+/// Clearing an entry is how you delete one — the same bargain the rest of the
+/// app makes, where an emptied cell records nothing rather than a zero. It
+/// replaced a delete command the interface never called.
+#[test]
+fn an_emptied_journal_entry_is_removed() {
+    use kairos_core::daily::{JournalEntry, MonthJournal};
+
+    let mut store = Store::in_memory().unwrap();
+    let mut journal = MonthJournal::new(2026, 9);
+    let mut kept = JournalEntry::new("Week one");
+    kept.body = "Something happened.".into();
+    let mut clearing = JournalEntry::new("Week two");
+    clearing.body = "Placeholder.".into();
+    journal.entries.push(kept.clone());
+    journal.entries.push(clearing.clone());
+    store.save_month_journal(&journal).unwrap();
+    assert_eq!(store.month_journal(2026, 9).unwrap().entries.len(), 2);
+
+    // Emptying the second one's title and body.
+    let mut journal = store.month_journal(2026, 9).unwrap();
+    let entry = journal.entries.iter_mut().find(|e| e.id == clearing.id).unwrap();
+    entry.title.clear();
+    entry.body.clear();
+    store.save_month_journal(&journal).unwrap();
+
+    let back = store.month_journal(2026, 9).unwrap();
+    assert_eq!(back.entries.len(), 1, "the blank one went");
+    assert_eq!(back.entries[0].title, "Week one", "the other did not");
+}

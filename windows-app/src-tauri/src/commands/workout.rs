@@ -9,7 +9,7 @@ use kairos_core::workout::{self, ExerciseId, RoutineId, SessionId, SetEntry};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
-use crate::commands::{read_store, today, with_store, CmdResult};
+use super::{read_store, today, with_store, CmdResult};
 use crate::state::AppState;
 
 #[derive(Serialize)]

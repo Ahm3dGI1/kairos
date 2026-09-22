@@ -7,7 +7,7 @@ use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::recur;
-use crate::task::{Priority, Task};
+use crate::task::Task;
 
 /// Which tasks a view shows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,14 +160,4 @@ fn due_key(task: &Task, today: NaiveDate) -> (bool, Option<NaiveDate>, Option<ch
         task.due
     };
     (next.is_none(), next, task.time)
-}
-
-/// The priority order used for display: high first, unprioritized last.
-pub fn priority_rank(priority: Priority) -> u8 {
-    match priority {
-        Priority::High => 0,
-        Priority::Medium => 1,
-        Priority::Low => 2,
-        Priority::None => 3,
-    }
 }

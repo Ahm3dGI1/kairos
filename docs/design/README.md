@@ -1,9 +1,3 @@
----
-noteId: "8a5b0ba0b3ae11f180d1c1f26322e340"
-tags: []
-
----
-
 # /docs/design
 
 The seven artboards of **Direction B — "Command Deck"**, extracted from the
@@ -14,7 +8,7 @@ intended surface at its real size.
 | Board | Shows |
 | --- | --- |
 | `direction-b-command-deck.html` | The task list: rail, status line, grouped rows, bottom capture bar |
-| `b-calendar.html` | The month grid, Sunday-first |
+| `b-calendar.html` | The month grid |
 | `b-habits.html` | The contribution grid, the month journal, the summary |
 | `b-detail-pane.html` | The detail column |
 | `b-capture.html` | The capture bar's five states, and the tint legend |

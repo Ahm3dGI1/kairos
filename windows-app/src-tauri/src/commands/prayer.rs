@@ -9,7 +9,7 @@ use kairos_core::prayer;
 use serde::Serialize;
 use tauri::State;
 
-use crate::commands::CmdResult;
+use super::CmdResult;
 use crate::state::AppState;
 
 #[derive(Serialize)]

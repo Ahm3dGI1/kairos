@@ -7,7 +7,7 @@ use kairos_core::{Setting, Settings};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::commands::CmdResult;
+use super::CmdResult;
 use crate::state::{self, AppState, DATA_CHANGED};
 
 /// Emitted when a switch moves, so every window re-reads rather than being

@@ -287,15 +287,6 @@ impl Settings {
             asr: crate::prayer::Asr::parse(&self.prayer_asr),
         }
     }
-
-    /// Which day a week starts on, for the calendar grid.
-    pub fn week_start(&self) -> chrono::Weekday {
-        if self.week_starts_monday {
-            chrono::Weekday::Mon
-        } else {
-            chrono::Weekday::Sun
-        }
-    }
 }
 
 fn kind_of(key: &str) -> SettingKind {

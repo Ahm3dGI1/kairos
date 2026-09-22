@@ -16,13 +16,13 @@ A free, open-source, simplified-but-capable todo app. Core interaction: type or 
 **Decision: monorepo.**
 
 ```
-/core           — shared business logic (task model, NL parsing, sync client)
+/core           — shared business logic: task model, NL parsing, recurrence, vault, store
 /windows-app    — Tauri shell: tray icon, widget, hotkey launcher, UI
-/linux-app      — terminal client (future; may build on existing Go/Bubbletea TUI)
-/mobile-app     — React Native or Flutter client (future)
-/sync-server    — lightweight self-hostable sync backend
-/docs
+/docs           — this spec, and the design boards the shell is built against
 ```
+
+`/linux-app`, `/mobile-app` and `/sync-server` are planned and have no code. They are described
+in §3 and §6; they get directories when they get contents, rather than standing empty.
 
 Rationale: one maintainer, one shared core depended on by every client — a monorepo keeps cross-cutting changes (e.g. a parsing bug fix) landing everywhere in one PR. Split into separate repos later only if independent maintainers take over individual platforms.
 

@@ -7,7 +7,6 @@
 //! write a snapshot out as Markdown and read it back. Neither imports the
 //! other.
 
-use chrono::NaiveDate;
 use rusqlite::params;
 
 use super::{Result, Store, DATE_FORMAT};
@@ -203,28 +202,13 @@ impl Store {
         }
         Ok(out)
     }
-
-    /// The date of the newest thing in the store, for deciding whether a vault
-    /// or a database is the more recent of the two.
-    pub fn latest_change(&self) -> Result<Option<NaiveDate>> {
-        let newest: Option<String> = self.conn.query_row(
-            "SELECT MAX(d) FROM (
-                 SELECT MAX(created_at) AS d FROM tasks
-                 UNION ALL SELECT MAX(completed_at) FROM tasks
-                 UNION ALL SELECT MAX(date) FROM day_logs
-                 UNION ALL SELECT MAX(date) FROM sessions
-             )",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(newest.and_then(|d| NaiveDate::parse_from_str(&d, DATE_FORMAT).ok()))
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::task::Task;
+    use chrono::NaiveDate;
 
     fn today() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 9, 20).unwrap()
