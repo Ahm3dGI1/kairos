@@ -3,8 +3,10 @@ import { call, clear, el } from './shared.js';
 export function createSettings({ container, onChange }) {
   let settings = [];
   let vault = null;
+  let layout = null;
 
   async function load() {
+    layout = await call('widget_layout');
     settings = (await call('settings', undefined, 'Reading settings')) ?? [];
     vault = await call('vault_info', undefined, 'Reading the vault');
     render();
@@ -129,6 +131,23 @@ export function createSettings({ container, onChange }) {
 
   function render() {
     clear(container);
+    const restore = el('input', { type: 'checkbox', checked: layout?.restore_on_start ? '' : null });
+    restore.addEventListener('change', async () => {
+      await call('set_widget_restore', { enabled: restore.checked }, 'Widget startup');
+      layout = await call('widget_layout');
+    });
+    container.appendChild(el('section', { class: 'widget-settings' }, [
+      el('strong', { text: 'Widget layout' }),
+      el('p', { text: 'Open any view as a widget, arrange and pin the windows, then save the layout. Enable Start with Windows below to restore it at sign-in.' }),
+      ...['agenda', 'calendar', 'habits', 'workout', 'settings'].map(view => el('button', { type: 'button', text: `+ ${view === 'agenda' ? 'Tasks' : view}`, onclick: () => call('create_widget', { view }) })),
+      el('label', {}, [restore, ' Restore saved layout when Kairos starts']),
+      el('button', { type: 'button', text: 'Save current widget layout', onclick: async () => {
+        const saved = await call('save_widget_layout', { restoreOnStart: restore.checked }, 'Save widget layout');
+        if (saved) { layout = saved; render(); }
+      }}),
+      el('button', { type: 'button', text: 'Restore saved widgets', onclick: () => call('restore_widget_layout', undefined, 'Restore widgets') }),
+      el('p', { text: `${layout?.widgets.length ?? 0} widgets saved. Close unwanted widgets and save again to remove them from the layout.` }),
+    ]));
 
     const sections = [];
     for (const setting of settings) {

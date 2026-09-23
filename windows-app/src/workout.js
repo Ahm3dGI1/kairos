@@ -1,11 +1,22 @@
-import { call, clear, el } from './shared.js';
+import { isEditing, call, clear, el } from './shared.js';
 
 export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) {
   let page = null;
   let routineId = null;
+  let sessionLimit = 8;
+  let extraSets = 0;
 
+  let pending = false;
+  let loadVersion = 0;
+  document.addEventListener('focusout', () => setTimeout(() => {
+    if (pending && !isEditing(gridNode.parentElement)) { pending = false; load(); }
+  }, 0));
   async function load() {
-    page = await call('workout_page', { routine: routineId }, 'Workout');
+    if (isEditing(gridNode.parentElement)) { pending = true; return; }
+    const version = ++loadVersion;
+    const result = await call('workout_page', { routine: routineId, limit: sessionLimit }, 'Workout');
+    if (version !== loadVersion || isEditing(gridNode.parentElement)) { pending = true; return; }
+    page = result;
     if (!page) return;
     routineId = page.routine;
 
@@ -190,6 +201,11 @@ export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) 
       renderExercise(exercise, sessions);
     }
 
+    gridNode.appendChild(el('div', { class: 'workout-tools', style: 'grid-column: 1 / -1' }, [
+      el('button', { type: 'button', text: '+ Set row', onclick: () => { extraSets += 1; renderGrid(); } }),
+      el('button', { type: 'button', text: 'Older sessions', onclick: () => { sessionLimit += 8; load(); } }),
+    ]));
+
     // A row to add the next exercise, in the name column.
     const adder = el('input', { class: 'inline', type: 'text', placeholder: '+ exercise' });
     adder.addEventListener('keydown', async (event) => {
@@ -208,7 +224,7 @@ export function createWorkout({ routinesNode, gridNode, emptyNode, onRoutine }) 
   }
 
   function renderExercise(exercise, sessions) {
-    const rows = page.max_sets;
+    const rows = page.max_sets + extraSets;
 
     for (let index = 1; index <= rows; index += 1) {
       // The name sits on the first row of its block and spans the rest.

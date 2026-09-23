@@ -81,7 +81,7 @@ export function clear(node) {
  * Surfaces an error where the user can see it rather than only in the console.
  * Every command call goes through this, so a failed write is never silent.
  */
-function reportError(where, error) {
+export function reportError(where, error) {
   console.error(where, error);
   const bar = document.getElementById('error-bar');
   if (!bar) return;
@@ -102,3 +102,15 @@ export async function call(cmd, args, where = cmd) {
     return null;
   }
 }
+
+export function isEditing(root = document) {
+  const active = document.activeElement;
+  return root.contains(active) && active?.matches('input:not(#quick-add):not(#line):not(.search), textarea, select, [contenteditable="true"]');
+}
+
+export function applyTheme(settings) {
+  if (settings.theme && settings.theme !== 'system') document.documentElement.dataset.theme = settings.theme;
+  else delete document.documentElement.dataset.theme;
+}
+
+listen('storage-error', ({ payload }) => reportError('Storage', payload));

@@ -29,9 +29,11 @@ export function createCapture({ input, layer, previewNode, getToday, onAdd, onJo
   function byteToIndex(text, byteOffset) {
     if (byteOffset <= 0) return 0;
     let bytes = 0;
-    for (let i = 0; i < text.length; i += 1) {
+    for (let i = 0; i < text.length;) {
       if (bytes >= byteOffset) return i;
-      bytes += encoder.encode(text[i]).length;
+      const char = String.fromCodePoint(text.codePointAt(i));
+      bytes += encoder.encode(char).length;
+      i += char.length;
     }
     return text.length;
   }
@@ -116,7 +118,9 @@ export function createCapture({ input, layer, previewNode, getToday, onAdd, onJo
     }
   }
 
+  let parseVersion = 0;
   async function reparse() {
+    const version = ++parseVersion;
     const text = input.value;
     if (!text.trim() || mode === 'journal') {
       spans = [];
@@ -125,6 +129,7 @@ export function createCapture({ input, layer, previewNode, getToday, onAdd, onJo
       return;
     }
     const preview = await call('preview_line', { line: text, excluded }, 'Preview');
+    if (version !== parseVersion || text !== input.value || mode !== 'task') return;
     spans = preview?.spans ?? [];
     renderLayer(text);
     renderPreview(preview);
@@ -206,8 +211,8 @@ export function createCapture({ input, layer, previewNode, getToday, onAdd, onJo
   });
 
   async function submit(keepOpen = false) {
-    const line = input.value.trim();
-    if (!line) return;
+    const line = input.value;
+    if (!line.trim()) return;
 
     if (mode === 'journal') {
       await onJournal?.(line);
@@ -221,6 +226,8 @@ export function createCapture({ input, layer, previewNode, getToday, onAdd, onJo
   }
 
   function reset() {
+    ++parseVersion;
+    clearTimeout(timer);
     input.value = '';
     lastValue = '';
     excluded = [];

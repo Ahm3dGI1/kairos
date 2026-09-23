@@ -3,8 +3,10 @@ import { dismissPopovers, refreshHabits, renderDetail } from './detail.js';
 import { createHabits } from './habits.js';
 import { createSettings } from './settings.js';
 import { createWorkout } from './workout.js';
-import { call, clear, el, listen, parseDate, toIso, today } from './shared.js';
+import { call, clear, el, listen, parseDate, toIso, today, isEditing } from './shared.js';
 
+const widgetMode = new URLSearchParams(location.search).has('widget');
+let widgetContext = null;
 const PAGES = ['agenda', 'calendar', 'habits', 'workout', 'settings'];
 
 /** Pages a setting can switch off. Tasks and Settings are always reachable. */
@@ -92,15 +94,25 @@ const workout = createWorkout({
   emptyNode: dom['workout-empty'],
   onRoutine: (name, sessions) => {
     if (state.page !== 'workout') return;
+    saveWidgetContext();
     dom.here.textContent = name;
     dom.count.textContent = `${sessions} session${sessions === 1 ? '' : 's'}`;
   },
 });
 
 // -- data
+let refreshVersion = 0;
+let refreshPending = false;
+document.addEventListener('focusout', () => setTimeout(() => {
+  if (refreshPending && !isEditing()) { refreshPending = false; refresh(); }
+}, 0));
 async function refresh() {
+  if (isEditing()) { refreshPending = true; return; }
+  const version = ++refreshVersion;
+  const page = state.page;
   state.todayDate = (await today()) ?? new Date();
 
+  if (version !== refreshVersion || page !== state.page) return;
   if (state.page === 'settings') {
     await settings.load();
     renderStatus();
@@ -110,11 +122,13 @@ async function refresh() {
   // The detail pane's habit picker names them, and a habit added on the
   // habits page has to show up there without a restart.
   await refreshHabits();
+  if (version !== refreshVersion || page !== state.page) return;
 
   if (state.page === 'habits') {
     await habits.load();
   } else if (state.page === 'workout') {
     await workout.load();
+    if (version !== refreshVersion || page !== state.page) return;
     renderWorkoutTools();
     return;
   } else {
@@ -124,10 +138,11 @@ async function refresh() {
 
   state.projects = (await call('projects', undefined, 'Projects')) ?? [];
   state.tags = (await call('tags', undefined, 'Tags')) ?? [];
-  renderStatus();
+  if (version === refreshVersion && page === state.page) renderStatus();
 }
 
 async function loadAgenda() {
+  const version = refreshVersion;
   const groups = await call(
     'agenda',
     {
@@ -140,6 +155,7 @@ async function loadAgenda() {
     },
     'Loading tasks',
   );
+  if (version !== refreshVersion || isEditing()) { refreshPending = true; return; }
   state.groups = groups ?? [];
   state.rows = state.groups.flatMap((group) => group.tasks);
   if (state.cursor >= state.rows.length) state.cursor = Math.max(0, state.rows.length - 1);
@@ -149,6 +165,7 @@ async function loadAgenda() {
 
 // -- the status line
 function renderStatus() {
+  if (document.activeElement?.matches('.search')) return;
   // These pages own their own line.
   if (state.page === 'habits' || state.page === 'workout') return;
 
@@ -232,6 +249,7 @@ function renderWorkoutTools() {
 
 /** The second sidebar: the lists a task can belong to, and the tags in use. */
 function renderLists() {
+  saveWidgetContext();
   clear(dom.lists);
 
   dom.lists.appendChild(el('div', { class: 'lists-head', text: 'LISTS' }));
@@ -623,12 +641,18 @@ const TITLES = {
 };
 
 function setPage(page) {
+  ++refreshVersion;
+  document.activeElement?.blur();
   // A page that has been switched off is not somewhere to land, including via
   // its number key or a stale state after the switch was flipped.
   const off = OPTIONAL_PAGES[page];
   if (off && state.settings[off] === false) page = 'agenda';
 
   state.page = page;
+  if (widgetMode) {
+    const title = document.querySelector('.widget-title'); if (title) title.textContent = TITLES[page];
+    saveWidgetContext();
+  }
   for (const name of PAGES) {
     dom[`page-${name}`].classList.toggle('active', name === page);
     dom[`${name}-page`].hidden = name !== page;
@@ -813,6 +837,7 @@ dom['sticky-toggle'].addEventListener('click', () =>
 );
 
 listen('data-changed', () => refresh());
+setInterval(() => refresh(), 60_000);
 listen('settings-changed', () => loadSettings());
 
 /**
@@ -846,17 +871,48 @@ async function loadSettings() {
   const values = await call('settings_values', undefined, 'Reading settings');
   if (!values) return;
   const first = !Object.keys(state.settings).length;
+  const previousCompleted = state.settings.show_completed;
   state.settings = values;
   // Only at boot: after that, the toggle in the status line is the user's
   // current choice and must not be overwritten under them.
-  if (first) state.showCompleted = values.show_completed;
+  if (first || previousCompleted !== values.show_completed) state.showCompleted = values.show_completed;
   applySettings();
 }
 
 async function boot() {
+  await call('widget_layout', undefined, 'Widget layout');
+  if (widgetMode) {
+    document.body.classList.add('view-widget');
+    widgetContext = await call('widget_context');
+    const bar = el('div', { class: 'widget-chrome' });
+    const title = el('span', { class: 'widget-title', text: widgetContext?.view ?? 'Kairos', 'data-tauri-drag-region': '' });
+    const pin = el('button', { type: 'button', text: widgetContext?.pinned ? 'Unpin' : 'Pin', onclick: async () => {
+      const pinned = await call('pin_widget'); if (pinned !== null) pin.textContent = pinned ? 'Unpin' : 'Pin';
+    }});
+    bar.append(title, pin, el('button', { type: 'button', text: 'Save layout', onclick: saveWidgetLayout }),
+      el('button', { type: 'button', text: 'Close', onclick: () => window.__TAURI__.window.getCurrentWindow().close() }));
+    document.body.prepend(bar);
+    state.project = widgetContext?.project ?? null;
+    if (widgetContext?.routine) workout.select(widgetContext.routine);
+  }
   await loadSettings();
+  if (widgetMode && widgetContext) setPage(widgetContext.view);
   await refresh();
-  capture.focus();
+  if (!widgetMode) capture.focus();
 }
 
 boot();
+
+function saveWidgetContext() {
+  if (!widgetMode) return;
+  return call('update_widget_context', { view: state.page, project: state.project, routine: workout.routine() });
+}
+async function saveWidgetLayout() {
+  await saveWidgetContext();
+  const layout = await call('widget_layout');
+  const saved = await call('save_widget_layout', { restoreOnStart: layout?.restore_on_start ?? true }, 'Save widget layout');
+  if (saved) toast(`saved ${saved.widgets.length} widgets`);
+}
+const popOut = el('button', { class: 'pop-out', type: 'button', text: 'Open as widget', onclick: () =>
+  call('create_widget', { view: state.page, project: state.project, routine: workout.routine() }, 'Create widget') });
+document.querySelector('.status').appendChild(popOut);

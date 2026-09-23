@@ -1,4 +1,4 @@
-import { call, clear, el, invoke, listen, parseDate, today } from './shared.js';
+import { applyTheme, call, clear, el, invoke, listen, parseDate, today } from './shared.js';
 
 const list = document.getElementById('list');
 const counts = document.getElementById('counts');
@@ -73,3 +73,7 @@ refresh();
 
 // Catch the date rolling over while the note sits open for days.
 setInterval(refresh, 5 * 60 * 1000);
+
+async function loadSettings() { applyTheme(await invoke('settings_values')); }
+listen('settings-changed', loadSettings);
+loadSettings();

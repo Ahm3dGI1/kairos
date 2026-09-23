@@ -2117,3 +2117,14 @@ select {
 .list-row .x:hover {
   color: var(--danger);
 }
+
+.widget-chrome { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.widget-title { flex: 1; cursor: move; text-transform: capitalize; }
+body.view-widget { display: flex; flex-direction: column; }
+.view-widget > .rail { display: none; }
+.view-widget > .column { flex: 1; min-height: 0; width: 100%; }
+.view-widget .pop-out { display: none; }
+.view-widget .detail { position: absolute; right: 0; top: 36px; bottom: 0; z-index: 10; }
+.widget-settings { padding: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
+.widget-settings p { flex-basis: 100%; }
+.workout-tools { display: flex; gap: 12px; padding: 10px; }

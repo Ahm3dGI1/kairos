@@ -1,17 +1,26 @@
-import { call, clear, el, parseDate, toIso } from './shared.js';
+import { isEditing, call, clear, el, parseDate, toIso } from './shared.js';
 
 export function createHabits({ rows, journal, summary, getToday, onMonth }) {
   /** The month on screen as [year, month]; null means the current one. */
   let shown = null;
   let data = null;
 
+  let pending = false;
+  let loadVersion = 0;
+  document.addEventListener('focusout', () => setTimeout(() => {
+    if (pending && !isEditing(rows.parentElement)) { pending = false; load(); }
+  }, 0));
   async function load() {
+    if (isEditing(rows.parentElement)) { pending = true; return; }
+    const version = ++loadVersion;
     if (!shown) {
       shown = (await call('current_month_pair', undefined, 'Month')) ?? null;
       if (!shown) return;
     }
     const [year, month] = shown;
-    data = await call('habit_month', { year, month }, 'Habits');
+    const result = await call('habit_month', { year, month }, 'Habits');
+    if (version !== loadVersion || isEditing(rows.parentElement)) { pending = true; return; }
+    data = result;
     if (!data) return;
 
     onMonth?.(data.label, data.habits.length);
@@ -376,8 +385,9 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
     if (index < 0) return;
 
     // If any is untouched, fill them in; if all are done, clear them.
-    const allDone = data.habits.every((h) => h.done[index]);
-    for (const habit of data.habits) {
+    const checks = data.habits.filter((h) => !h.numeric);
+    const allDone = checks.every((h) => h.done[index]);
+    for (const habit of checks) {
       if (habit.done[index] === !allDone) continue;
       await call('toggle_habit', { id: habit.id, date: todayIso }, 'Habit');
     }
@@ -388,6 +398,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
   async function renderJournal() {
     const [year, month] = shown;
     const page = await call('month_journal', { year, month }, 'Journal');
+    if (isEditing(journal)) { pending = true; return; }
     clear(journal);
     clear(summary);
 
@@ -425,7 +436,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
       clearTimeout(timer);
       timer = setTimeout(save, 600);
     });
-    body.addEventListener('blur', save);
+    body.addEventListener('blur', () => { clearTimeout(timer); save(); });
 
     // An entry headed with today's date is the live one.
     const isToday = entry.title && parseDate(todayIso)?.getDate() === Number(entry.title.match(/\d+/)?.[0]);
@@ -445,7 +456,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
     const pct = slots ? Math.round((done / slots) * 100) : 0;
     const best = data.habits.reduce((max, h) => Math.max(max, h.streak), 0);
     const perfect = data.days.filter(
-      (day, i) => !day.is_future && data.habits.length && data.habits.every((h) => h.done[i]),
+      (day, i) => !day.is_future && data.habits.length && data.habits.every((h) => h.numeric ? Boolean(h.values[i]) : h.done[i]),
     ).length;
 
     summary.append(

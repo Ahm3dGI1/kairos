@@ -1,10 +1,11 @@
 import { createCapture } from './capture.js';
-import { el, invoke, listen, today } from './shared.js';
+import { applyTheme, el, invoke, listen, today } from './shared.js';
 
 const input = document.getElementById('line');
 const previewNode = document.getElementById('preview');
 let todayDate = new Date();
 let keepOpen = false;
+let settings = {};
 
 async function hide() {
   await invoke('hide_window', { label: 'quick-add' });
@@ -16,7 +17,7 @@ const capture = createCapture({
   previewNode,
   getToday: () => todayDate,
   onAdd: () => {
-    if (!keepOpen) hide();
+    if (!keepOpen && !settings.hotkey_stays_open) hide();
     keepOpen = false;
   },
 });
@@ -56,3 +57,11 @@ listen('quick-add-opened', async () => {
   todayDate = (await today()) ?? new Date();
   capture.focus();
 })();
+
+async function loadSettings() {
+  settings = await invoke('settings_values');
+  applyTheme(settings);
+  capture.setPills(settings.parse_pills !== false);
+}
+listen('settings-changed', loadSettings);
+loadSettings();
