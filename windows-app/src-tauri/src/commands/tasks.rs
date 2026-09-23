@@ -146,11 +146,6 @@ pub fn delete_task(app: AppHandle, state: State<'_, AppState>, id: TaskId) -> Cm
 }
 
 /// Lets a field tell "was not sent" apart from "was sent as null".
-///
-/// Serde folds both onto `None` for a plain `Option<Option<T>>`, which would
-/// make "leave the due date alone" and "clear the due date" the same request —
-/// so every edit would have to send every field, and clearing one would be
-/// impossible. Absent stays `None`; an explicit `null` becomes `Some(None)`.
 fn sent<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     T: Deserialize<'de>,
@@ -199,6 +194,8 @@ pub fn update_task(app: AppHandle, state: State<'_, AppState>, edit: Edit) -> Cm
         }
         if let Some(due) = edit.due {
             task.due = due;
+            task.recurrence_anchor = due;
+            task.exceptions.clear();
         }
         if let Some(time) = edit.time {
             task.time = time.and_then(|t| chrono::NaiveTime::parse_from_str(&t, "%H:%M").ok());
@@ -222,6 +219,8 @@ pub fn update_task(app: AppHandle, state: State<'_, AppState>, edit: Edit) -> Cm
             task.checklist = kairos_core::Checklist::parse(&mode);
         }
         if let Some(phrase) = edit.recurrence {
+            task.recurrence_anchor = task.due;
+            task.exceptions.clear();
             task.recurrence = phrase
                 .filter(|p| !p.trim().is_empty())
                 .and_then(|p| kairos_core::recurrence_from_phrase(&p));
@@ -261,12 +260,7 @@ pub fn toggle_subtask(
     subtask_id: uuid::Uuid,
 ) -> CmdResult<TaskView> {
     let today = today();
-    let task = with_store(&app, &state, |store| {
-        let mut task = store.get(id)?.ok_or(kairos_core::StoreError::NotFound(id))?;
-        kairos_core::complete_item(&mut task, subtask_id, today);
-        store.save(&task)?;
-        Ok(task)
-    })?;
+    let task = with_store(&app, &state, |store| store.complete_subtask(id, subtask_id, today))?;
     Ok(TaskView::new(task, today))
 }
 
@@ -281,6 +275,8 @@ pub fn skip_occurrence(
     let today = today();
     let task = with_store(&app, &state, |store| {
         let mut task = store.get(id)?.ok_or(kairos_core::StoreError::NotFound(id))?;
+        task.recurrence_anchor = task.recurrence_anchor.or(task.due);
+        task.exceptions.retain(|e| e.date != date);
         task.exceptions.push(kairos_core::Exception::skip(date));
         // Move the anchor past the skipped date so the task leaves today's list.
         if task.due == Some(date) {
@@ -304,6 +300,8 @@ pub fn reschedule_occurrence(
     let today = today();
     let task = with_store(&app, &state, |store| {
         let mut task = store.get(id)?.ok_or(kairos_core::StoreError::NotFound(id))?;
+        task.recurrence_anchor = task.recurrence_anchor.or(task.due);
+        task.exceptions.retain(|e| e.date != date);
         task.exceptions.push(kairos_core::Exception::move_to(date, to));
         store.save(&task)?;
         Ok(task)

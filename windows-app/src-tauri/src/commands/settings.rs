@@ -58,11 +58,6 @@ pub fn vault_info(state: State<'_, AppState>) -> CmdResult<VaultInfo> {
 }
 
 /// Sets one switch and writes the file.
-///
-/// Most switches take effect on the next render, because the frontend reads
-/// them every time it draws. The few that cannot — the ones that register a
-/// global hotkey or open a database — are flagged `restart` in their
-/// description, and the page says so rather than pretending.
 #[tauri::command]
 pub fn set_setting(
     app: AppHandle,
@@ -70,21 +65,29 @@ pub fn set_setting(
     key: String,
     value: serde_json::Value,
 ) -> CmdResult<Vec<Setting>> {
+    let _guard = state.io.lock().map_err(|_| "storage lock poisoned")?;
     let mut settings = state.settings.lock().map_err(|_| "settings lock poisoned")?;
-    if !settings.set(&key, value) {
+    let mut updated = settings.clone();
+    if !updated.set(&key, value) {
         return Err(format!("{key} is not a setting, or that is not a value it takes"));
     }
-    settings.save(state.paths.settings_file()).map_err(|e| e.to_string())?;
-    let described = settings.describe();
-    let start_on_login = settings.start_on_login;
-    drop(settings);
-
-    // Most switches are read back at the next render and need nothing here.
-    // This one reaches outside the app, into the registry, so saving it is not
-    // the same as applying it.
     if key == "start_on_login" {
-        crate::shell::sync_autostart(&app, start_on_login);
+        crate::shell::sync_autostart(&app, updated.start_on_login)?;
     }
+    if let Err(error) = updated.save(state.paths.settings_file()) {
+        if key == "start_on_login" {
+            let _ = crate::shell::sync_autostart(&app, settings.start_on_login);
+        }
+        return Err(error.to_string());
+    }
+    let described = updated.describe();
+    *settings = updated;
+    if key == "sticky_note" && !settings.sticky_note {
+        if let Some(window) = app.get_webview_window("widget") {
+            let _ = window.hide();
+        }
+    }
+    drop(settings);
 
     let _ = app.emit(SETTINGS_CHANGED, ());
     let _ = app.emit(DATA_CHANGED, ());
@@ -96,9 +99,7 @@ pub fn set_setting(
 /// files and want to see it land.
 #[tauri::command]
 pub fn reload_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    if !state::import(&state) {
-        return Err("the vault is off, or could not be read".into());
-    }
+    state::import(&state)?;
     state::notify_changed(&app);
     Ok(())
 }
@@ -106,7 +107,7 @@ pub fn reload_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()>
 /// Writes every file out again, whatever their current contents.
 #[tauri::command]
 pub fn rewrite_vault(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    state::export(&state);
+    state::export(&state)?;
     state::notify_changed(&app);
     Ok(())
 }

@@ -6,8 +6,10 @@ mod reminders;
 mod shell;
 mod state;
 mod watcher;
+mod widgets;
 
 fn main() {
+    use tauri::Manager;
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -17,8 +19,12 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let handle = app.handle().clone();
+            app.manage(widgets::Windows::default());
             state::init(&handle)?;
             shell::setup(&handle)?;
+            if let Err(error) = widgets::startup(&handle) {
+                eprintln!("Could not restore widgets: {error}");
+            }
             reminders::start(&handle);
             watcher::start(&handle);
             Ok(())
@@ -29,8 +35,14 @@ fn main() {
             // a todo app that vanishes when you close its window is a todo app
             // that stops reminding you. Quit is on the tray menu.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Unless the user asked for the X to mean what it says.
-                if !commands::settings::current(window.app_handle()).close_to_tray {
+                let app = window.app_handle();
+                if window.label().starts_with("widget-") {
+                    widgets::closed(app, window.label());
+                    return;
+                }
+                let settings = commands::settings::current(app);
+                if window.label() == "main" && !(settings.close_to_tray && settings.tray_icon) {
+                    app.exit(0);
                     return;
                 }
                 api.prevent_close();
@@ -86,6 +98,14 @@ fn main() {
             commands::settings::reload_vault,
             commands::settings::rewrite_vault,
             commands::settings::open_vault,
+            widgets::create_widget,
+            widgets::widget_context,
+            widgets::update_widget_context,
+            widgets::pin_widget,
+            widgets::widget_layout,
+            widgets::save_widget_layout,
+            widgets::set_widget_restore,
+            widgets::restore_widget_layout,
             shell::hide_window,
             shell::toggle_widget_command,
             shell::show_main_window,

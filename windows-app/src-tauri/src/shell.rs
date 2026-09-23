@@ -28,9 +28,13 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         build_tray(app, settings.sticky_note)?;
     }
     if settings.global_hotkey {
-        register_hotkey(app)?;
+        if let Err(error) = register_hotkey(app) {
+            eprintln!("Quick-add shortcut unavailable: {error}");
+        }
     }
-    sync_autostart(app, settings.start_on_login);
+    if let Err(error) = sync_autostart(app, settings.start_on_login) {
+        eprintln!("{error}");
+    }
 
     // Started by Windows rather than by the user, so there is nothing to show:
     // wait in the tray, which is where the hotkey and reminders live anyway.
@@ -50,27 +54,16 @@ pub fn launched_at_login() -> bool {
 }
 
 /// Brings the run-at-login entry into agreement with the setting.
-///
-/// `settings.json` is the record, the same rule the vault follows. So an entry
-/// removed by hand or by some other tool is put back, and one left behind
-/// after the switch was turned off is cleared — rather than the app trusting
-/// whatever the registry happens to say.
-pub fn sync_autostart(app: &AppHandle, wanted: bool) {
+pub fn sync_autostart(app: &AppHandle, wanted: bool) -> Result<(), String> {
     let launcher = app.autolaunch();
     if launcher.is_enabled().is_ok_and(|current| current == wanted) {
-        return;
+        return Ok(());
     }
     let result = if wanted { launcher.enable() } else { launcher.disable() };
-    if let Err(error) = result {
-        eprintln!("could not change the run-at-login entry: {error}");
-    }
+    result.map_err(|error| format!("Could not change Windows startup: {error}"))
 }
 
 /// Creates the quick-add overlay and the desktop widget up front, both hidden.
-///
-/// Building them at startup rather than on demand is what makes the hotkey feel
-/// instant: showing an existing window is immediate, where constructing a
-/// webview is not.
 fn build_auxiliary_windows(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     WebviewWindowBuilder::new(app, "quick-add", WebviewUrl::App("quick-add.html".into()))
         .title("Quick add")
@@ -199,10 +192,6 @@ pub fn toggle_widget(app: &AppHandle) {
 static PINNED: AtomicBool = AtomicBool::new(false);
 
 /// Flips the pin and returns the new state.
-///
-/// Unpinned, the note is an ordinary window and falls behind whatever you focus
-/// next. Pinned, it stays above everything — which is useful and intrusive in
-/// equal measure, so it is never the default.
 #[tauri::command]
 pub fn toggle_sticky_pin(app: AppHandle) -> bool {
     let pinned = !PINNED.load(Ordering::Relaxed);

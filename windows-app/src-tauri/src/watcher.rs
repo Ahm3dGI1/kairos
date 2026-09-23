@@ -1,70 +1,49 @@
-use std::time::Duration;
-
-use tauri::{AppHandle, Manager};
-
 use crate::state::{self, AppState};
-
-/// How often to look. Fast enough that saving a file in an editor and
-/// alt-tabbing back feels immediate, slow enough to be invisible.
-const INTERVAL: Duration = Duration::from_millis(1500);
-
-/// A cheap summary of the vault's contents: how many files, and the newest
-/// modification time among them. Any edit moves one or the other.
-type Fingerprint = (usize, u128);
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, Manager};
 
 pub fn start(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
-        let mut last = match fingerprint(&app) {
-            Some(print) => print,
-            // No vault: nothing to watch, and turning one on needs a restart.
-            None => return,
-        };
-
+        let mut last_error = String::new();
+        let mut last_settings = Vec::new();
         loop {
-            std::thread::sleep(INTERVAL);
-            let Some(current) = fingerprint(&app) else { continue };
-            if current == last {
-                continue;
-            }
-            last = current;
-
+            std::thread::sleep(Duration::from_millis(1500));
             let Some(state) = app.try_state::<AppState>() else { continue };
-            if state::import(&state) {
-                state::notify_changed(&app);
+            match state::import(&state) {
+                Ok(changed) => {
+                    last_error.clear();
+                    if changed {
+                        state::notify_changed(&app);
+                    }
+                }
+                Err(error) => {
+                    if error != last_error {
+                        let _ = app.emit("storage-error", &error);
+                        last_error = error;
+                    }
+                }
             }
-            // Take the fingerprint again: importing may have rewritten files
-            // (a hand-written line gaining an id, say), and that must not read
-            // as another external edit on the next tick.
-            if let Some(settled) = fingerprint(&app) {
-                last = settled;
-            }
-        }
-    });
-}
-
-fn fingerprint(app: &AppHandle) -> Option<Fingerprint> {
-    let state = app.try_state::<AppState>()?;
-    let vault = state.vault.lock().ok()?;
-    let root = vault.as_ref()?.root().to_path_buf();
-    drop(vault);
-
-    let mut count = 0;
-    let mut newest = 0u128;
-    for dir in ["tasks", "habits", "workouts"] {
-        let Ok(entries) = std::fs::read_dir(root.join(dir)) else { continue };
-        for entry in entries.flatten() {
-            let Ok(meta) = entry.metadata() else { continue };
-            if !meta.is_file() {
-                continue;
-            }
-            count += 1;
-            if let Ok(modified) = meta.modified() {
-                if let Ok(since) = modified.duration_since(std::time::UNIX_EPOCH) {
-                    newest = newest.max(since.as_millis());
+            if let Ok(bytes) = std::fs::read(state.paths.settings_file()) {
+                if bytes != last_settings {
+                    if let Ok(settings) = serde_json::from_slice::<kairos_core::Settings>(&bytes) {
+                        if let Ok(mut current) = state.settings.lock() {
+                            if *current != settings {
+                                if current.start_on_login != settings.start_on_login {
+                                    if let Err(error) =
+                                        crate::shell::sync_autostart(&app, settings.start_on_login)
+                                    {
+                                        let _ = app.emit("storage-error", error);
+                                    }
+                                }
+                                *current = settings;
+                                let _ = app.emit(crate::commands::settings::SETTINGS_CHANGED, ());
+                            }
+                        }
+                        last_settings = bytes;
+                    }
                 }
             }
         }
-    }
-    Some((count, newest))
+    });
 }

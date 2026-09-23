@@ -5,7 +5,11 @@ use kairos_core::vault::Vault;
 use kairos_core::{Settings, Store};
 use tauri::{AppHandle, Emitter, Manager};
 
+pub type Fingerprint = std::collections::BTreeMap<PathBuf, Vec<u8>>;
+
 pub struct AppState {
+    pub io: Mutex<()>,
+    pub fingerprint: Mutex<Fingerprint>,
     pub store: Mutex<Store>,
     /// Absent when the user has turned the vault off.
     pub vault: Mutex<Option<Vault>>,
@@ -33,10 +37,6 @@ impl Paths {
 pub const DATA_CHANGED: &str = "data-changed";
 
 /// Remembers where the vault is, so the settings inside it can be found again.
-///
-/// One line of text rather than a second config format: everything else the
-/// user might want to change lives in the vault, and this file exists only to
-/// point at it.
 const POINTER: &str = "vault-path.txt";
 
 /// Opens the vault and the database, and brings them into agreement.
@@ -106,7 +106,7 @@ pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             match vault
                 .read(today)
                 .map_err(|e| e.to_string())
-                .and_then(|snapshot| store.restore(&snapshot).map_err(|e| e.to_string()))
+                .and_then(|snapshot| store.restore_external(&snapshot).map_err(|e| e.to_string()))
             {
                 Ok(()) => {}
                 Err(error) => eprintln!("could not read the vault, keeping the database: {error}"),
@@ -125,9 +125,14 @@ pub fn init(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let _ = std::fs::write(paths.data_dir.join(POINTER), vault_dir.to_string_lossy().as_ref());
-    let _ = settings.save(paths.settings_file());
+    if !paths.settings_file().exists() {
+        settings.save(paths.settings_file())?;
+    }
 
+    let fingerprint = vault.as_ref().and_then(|v| v.fingerprint().ok()).unwrap_or_default();
     app.manage(AppState {
+        io: Mutex::new(()),
+        fingerprint: Mutex::new(fingerprint),
         store: Mutex::new(store),
         vault: Mutex::new(vault),
         settings: Mutex::new(settings),
@@ -177,40 +182,59 @@ fn back_up(data_dir: &std::path::Path, store: &Store) {
 }
 
 /// Mirrors the database back out to the files.
-///
-/// Cheap to call after every mutation: the vault only touches a file whose
-/// contents actually changed, so a completed task rewrites one file and leaves
-/// the rest of the folder's timestamps alone.
-pub fn export(state: &AppState) {
-    let Ok(vault) = state.vault.lock() else { return };
-    let Some(vault) = vault.as_ref() else { return };
-    let Ok(store) = state.store.lock() else { return };
-    match store.snapshot().map(|snapshot| vault.write(&snapshot)) {
-        Ok(Ok(_)) => {}
-        Ok(Err(error)) => eprintln!("could not write the vault: {error}"),
-        Err(error) => eprintln!("could not read the store: {error}"),
-    }
+pub fn export(state: &AppState) -> Result<(), String> {
+    let _guard = state.io.lock().map_err(|_| "storage lock poisoned")?;
+    sync_files(state)?;
+    let store = state.store.lock().map_err(|_| "store lock poisoned")?;
+    export_store(state, &store)
 }
 
-/// Rebuilds the database from the files. Returns whether it ran.
-pub fn import(state: &AppState) -> bool {
-    let Ok(vault) = state.vault.lock() else { return false };
-    let Some(vault) = vault.as_ref() else { return false };
-    let today = chrono::Local::now().date_naive();
-
-    let snapshot = match vault.read(today) {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            eprintln!("could not read the vault: {error}");
-            return false;
+pub fn export_store(state: &AppState, store: &Store) -> Result<(), String> {
+    let vault = state.vault.lock().map_err(|_| "vault lock poisoned")?;
+    if let Some(vault) = vault.as_ref() {
+        let mut last = state.fingerprint.lock().map_err(|_| "fingerprint lock poisoned")?;
+        if vault.fingerprint().map_err(|e| e.to_string())? != *last {
+            return Err(
+                "Files changed during this edit. Your edit was not saved; reload and try again."
+                    .into(),
+            );
         }
-    };
-    let Ok(mut store) = state.store.lock() else { return false };
-    if let Err(error) = store.restore(&snapshot) {
-        eprintln!("could not rebuild from the vault: {error}");
-        return false;
+        let snapshot = store.snapshot().map_err(|e| e.to_string())?;
+        *last = vault
+            .write_checked(&snapshot, &last)
+            .map_err(|e| format!("Could not save the vault: {e}"))?;
     }
-    true
+    Ok(())
+}
+
+// Caller holds io throughout import, mutation and export.
+pub fn sync_files(state: &AppState) -> Result<bool, String> {
+    let vault = state.vault.lock().map_err(|_| "vault lock poisoned")?;
+    let Some(vault) = vault.as_ref() else { return Ok(false) };
+    let current = vault.fingerprint().map_err(|e| e.to_string())?;
+    let mut last = state.fingerprint.lock().map_err(|_| "fingerprint lock poisoned")?;
+    if current == *last {
+        return Ok(false);
+    }
+    for dir in ["tasks", "habits", "workouts"] {
+        if last.keys().any(|p| p.starts_with(dir)) && !vault.root().join(dir).is_dir() {
+            return Err(format!("The {dir} folder is unavailable. Restore it before importing."));
+        }
+    }
+    let snapshot = vault.read(chrono::Local::now().date_naive()).map_err(|e| e.to_string())?;
+    if vault.fingerprint().map_err(|e| e.to_string())? != current {
+        return Err("Vault is still changing; retry after the editor finishes saving.".into());
+    }
+    let mut store = state.store.lock().map_err(|_| "store lock poisoned")?;
+    back_up(&state.paths.data_dir, &store);
+    store.restore_external(&snapshot).map_err(|e| e.to_string())?;
+    *last = current;
+    Ok(true)
+}
+
+pub fn import(state: &AppState) -> Result<bool, String> {
+    let _guard = state.io.lock().map_err(|_| "storage lock poisoned")?;
+    sync_files(state)
 }
 
 /// Tells every window the task list moved under it, and refreshes the tray
@@ -218,4 +242,80 @@ pub fn import(state: &AppState) -> bool {
 pub fn notify_changed(app: &AppHandle) {
     let _ = app.emit(DATA_CHANGED, ());
     crate::reminders::update_tooltip(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kairos_core::Task;
+    struct TestState {
+        root: PathBuf,
+        state: AppState,
+    }
+    impl TestState {
+        fn new() -> Self {
+            let root =
+                std::env::temp_dir().join(format!("kairos-shell-test-{}", uuid::Uuid::new_v4()));
+            let vault = Vault::new(root.join("vault"));
+            let store = Store::in_memory().unwrap();
+            vault.write(&store.snapshot().unwrap()).unwrap();
+            let fingerprint = vault.fingerprint().unwrap();
+            let state = AppState {
+                io: Mutex::new(()),
+                fingerprint: Mutex::new(fingerprint),
+                store: Mutex::new(store),
+                vault: Mutex::new(Some(vault)),
+                settings: Mutex::new(Settings::default()),
+                paths: Paths { data_dir: root.join("data"), vault_dir: root.join("vault") },
+            };
+            Self { root, state }
+        }
+        fn file(&self) -> PathBuf {
+            self.state.paths.vault_dir.join("tasks/inbox.md")
+        }
+    }
+    impl Drop for TestState {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn imports_external_edits_before_the_next_app_write() {
+        let test = TestState::new();
+        std::fs::write(test.file(), "# Inbox\n- [ ] External task\n").unwrap();
+        assert!(sync_files(&test.state).unwrap());
+        let mut store = test.state.store.lock().unwrap();
+        store.save(&Task::new("App task", chrono::Local::now().date_naive())).unwrap();
+        export_store(&test.state, &store).unwrap();
+        let text = std::fs::read_to_string(test.file()).unwrap();
+        assert!(text.contains("External task") && text.contains("App task"));
+    }
+
+    #[test]
+    fn refuses_to_overwrite_a_file_changed_after_import() {
+        let test = TestState::new();
+        let store = test.state.store.lock().unwrap();
+        std::fs::write(test.file(), "# Inbox\n- [ ] Do not overwrite\n").unwrap();
+        assert!(export_store(&test.state, &store).is_err());
+        assert!(std::fs::read_to_string(test.file()).unwrap().contains("Do not overwrite"));
+    }
+
+    #[test]
+    fn missing_directory_does_not_empty_the_database() {
+        let test = TestState::new();
+        std::fs::remove_file(test.file()).unwrap();
+        std::fs::remove_dir(test.state.paths.vault_dir.join("tasks")).unwrap();
+        assert!(sync_files(&test.state).is_err());
+    }
+
+    #[test]
+    fn fingerprint_detects_renames_and_content_changes() {
+        let test = TestState::new();
+        let vault = test.state.vault.lock().unwrap();
+        let vault = vault.as_ref().unwrap();
+        let before = vault.fingerprint().unwrap();
+        std::fs::rename(test.file(), test.file().with_file_name("renamed.md")).unwrap();
+        assert_ne!(vault.fingerprint().unwrap(), before);
+    }
 }

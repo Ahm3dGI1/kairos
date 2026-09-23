@@ -73,6 +73,7 @@ const RECENT: u32 = 8;
 pub fn workout_page(
     state: State<'_, AppState>,
     routine: Option<RoutineId>,
+    limit: Option<u32>,
 ) -> CmdResult<WorkoutPage> {
     let today = today();
     read_store(&state, |store| {
@@ -102,7 +103,7 @@ pub fn workout_page(
         };
 
         let exercises = store.exercises(id)?;
-        let logs = store.sessions(id, RECENT)?;
+        let logs = store.sessions(id, limit.unwrap_or(RECENT).clamp(1, 1000))?;
         let max_sets =
             logs.iter().flat_map(|log| log.sets.iter().map(|s| s.index)).max().unwrap_or(0).max(3);
 

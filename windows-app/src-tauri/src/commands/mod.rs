@@ -57,13 +57,26 @@ pub fn with_store<T>(
     state: &State<'_, AppState>,
     f: impl FnOnce(&mut Store) -> Result<T, kairos_core::StoreError>,
 ) -> CmdResult<T> {
-    let mut store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
-    let out = f(&mut store).map_err(|e| e.to_string())?;
+    let guard = state.io.lock().map_err(|_| "storage lock poisoned")?;
+    crate::state::sync_files(state)?;
+    let mut store = state.store.lock().map_err(|_| "store lock poisoned")?;
+    store.begin_edit().map_err(|e| e.to_string())?;
+    let result = f(&mut store).map_err(|e| e.to_string()).and_then(|out| {
+        crate::state::export_store(state, &store)?;
+        Ok(out)
+    });
+    let out = match result {
+        Ok(out) => {
+            store.commit_edit().map_err(|e| e.to_string())?;
+            out
+        }
+        Err(error) => {
+            let _ = store.rollback_edit();
+            return Err(error);
+        }
+    };
     drop(store);
-    // The files are the record, so a change is not really made until they say
-    // so. This is the one place every mutation passes through, which is why
-    // the mirror lives here rather than in each command.
-    crate::state::export(state);
+    drop(guard);
     notify_changed(app);
     Ok(out)
 }
