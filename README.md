@@ -32,7 +32,7 @@ unpinned widgets behave like normal windows.
 
 ## Data and recovery
 
-The default vault is `%USERPROFILE%\Kairos`; an existing `Master Todo` vault is adopted.
+The default vault is `%USERPROFILE%\Kairos`;
 Settings shows the actual location.
 
 ```text
