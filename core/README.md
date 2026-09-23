@@ -23,13 +23,14 @@ Try it: `cargo run -p kairos-core --example try_parse -- "gym every day 5pm"`
 | `filter.rs` | the saved views, and the narrowing a list applies on top of them |
 | `daily.rs` | habits, their kinds, streaks, and the month journal |
 | `workout.rs` | routines, exercises, sessions and sets |
+| `widgets.rs` | saved widget views, geometry and layout preferences |
 | `settings.rs` | every switch a client should offer, described so it can render them |
 
 ## The two things worth knowing
 
 **The files are the record.** `vault/` owns a folder of Markdown that holds
 every task, habit and workout; the database is an index rebuilt from it, and
-deleting it costs nothing. `Snapshot` is the only seam between the two — the
+rebuilding it preserves vault data; undo history remains database-only. `Snapshot` is the only seam between the two — the
 store never learns about files, the vault never learns about SQL. Anything new
 needs a text form before it is done.
 
@@ -60,7 +61,7 @@ a colon, or a preceding "at" — so "call 5 people" keeps its 5.
 
 ## Not yet
 
-- A sync client. A vault in a synced folder covers most of it meanwhile.
+- A sync client. Concurrent file edits are detected, but there is no multi-device merge protocol.
 - Numeric slash dates (`12/25`), which need a locale decision first.
 - Relative times ("in 20 minutes"), and durations.
 - Full RFC 5545 recurrence. `Recurrence` covers the phrases the parser accepts;

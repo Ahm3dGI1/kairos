@@ -1,0 +1,32 @@
+name: Checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust tools
+        run: rustup component add rustfmt clippy
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Tests
+        run: cargo test --workspace --locked
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser test dependencies
+        shell: pwsh
+        run: |
+          npm install --prefix "$env:RUNNER_TEMP/kairos-browser" playwright@1.62.1
+          node "$env:RUNNER_TEMP/kairos-browser/node_modules/playwright/cli.js" install chromium
+      - name: Frontend regressions
+        shell: pwsh
+        run: |
+          $env:KAIROS_PLAYWRIGHT = "$env:RUNNER_TEMP/kairos-browser/node_modules/playwright"
+          node --test windows-app/tests/frontend.test.cjs

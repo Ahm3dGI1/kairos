@@ -73,8 +73,8 @@ cargo tauri build               # installers -> target/release/bundle
   nowhere else. Clients are presentation and platform integration only — a Tauri command should be
   a thin wrapper over a core call, never a place where a rule gets restated.
 - **The files are the system of record.** `/core/src/vault` owns a folder of Markdown files that
-  holds every task, habit and workout; the SQLite database is an index rebuilt from it. Deleting
-  the database must cost nothing. Any new kind of data needs a text form before it is done, and
+  holds every task, habit and workout; the SQLite database is an index rebuilt from it. Rebuilding
+  the database preserves vault data; undo history stays database-only. Any new kind of data needs a text form before it is done, and
   `Snapshot` is the only seam between the two — the store never learns about files, the vault
   never learns about SQL.
 - **Offline-first is a hard requirement, not a fallback.** A feature that stops working without
@@ -83,3 +83,5 @@ cargo tauri build               # installers -> target/release/bundle
   to run, or on accounts a user cannot provision themselves.
 - **Cross-platform by default.** Platform-specific code stays in that platform's package.
 - **Code style is delegated to `rustfmt` and `clippy`** — do not add formatting rules here.
+
+- Widget layouts live in `widget-layout.json` in the vault. Frontend tests use a headless browser with mock data; never use a user vault for tests.

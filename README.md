@@ -1,118 +1,94 @@
 # Kairos
 
-*καιρός* — the opportune moment, as against *chronos*, clock time. The useful
-question is not what time it is but which thing is worth doing now.
+*Kairos* means the opportune moment: which thing is worth doing now?
 
-A todo app for Windows 11 whose defining interaction is one line of plain
-English. Type
+An offline-first Windows todo app. Type `gym every day 5pm @health #fitness !p1`
+to capture a structured recurring task. Your data lives in editable Markdown
+files, with SQLite as a local index. No account or paid tier.
 
-```
-gym every day 5pm @health #fitness !p1
-```
+## Features
 
-and you get a task called "Gym" that repeats daily at 17:00, in the Health
-project, tagged fitness, at top priority. No date picker, no time picker, no
-recurrence dialog.
+- Tasks grouped by overdue, today, tomorrow, next seven days, later and someday.
+- Natural-language dates, times, priorities, projects, tags and custom weekday recurrence.
+- Task notes, subtasks, recurring backlogs, per-occurrence moves and skips.
+- Calendar, monthly checkbox/numeric/duration habits, and a monthly journal.
+- Linked task/habit completion with undo and redo.
+- Workout routines, exercises, dated sessions, additional sets and older-session browsing.
+- Tray, reminders, global quick add, themes and optional Windows startup.
+- Independent widgets for every view, with saved positions, sizes, filters and pin states.
 
-Free, open source, no paid tier, and no account. Your data is a folder of
-Markdown files you own.
+## Widgets and startup
 
-## Why
+1. Open a view and select **Open as widget**, or create widgets from Settings.
+2. Drag the widget header, resize its edges, and optionally select **Pin**.
+3. Choose **Save layout** in a widget or **Save current widget layout** in Settings.
+4. Keep **Restore saved layout when Kairos starts** enabled.
+5. Enable **Start with Windows** from the installed app to restore the layout at sign-in.
 
-Every capable todo app either paywalls the features that make it capable,
-locks your data in someone else's cloud, or makes you fill in a form to record
-a thought you could have typed in four words. Kairos is the alternative to all
-three.
+Closing a widget does not change the saved layout. Close unwanted widgets and save again
+to update it. Layouts live in `widget-layout.json` in the vault. If a monitor is missing,
+widgets reopen on an available monitor. Pinning keeps a widget above other windows;
+unpinned widgets behave like normal windows.
 
-## What it does
+## Data and recovery
 
-- **Single-line capture** with a live preview of what was understood. Each
-  recognised phrase is tinted in the field, and backspacing against one
-  un-parses it — the words drop back into the title, the way an editor undoes
-  an autoformat.
-- **One task list**, grouped Overdue → Today → Tomorrow → Next 7 days → Later
-  → Someday. Projects and tags narrow it from a sidebar.
-- **Recurring tasks** with per-occurrence exceptions: skip or push a single
-  Monday without breaking the series.
-- **A calendar** with recurrence expanded onto every day a task falls on.
-- **Habits by the month** — a tick, a duration, or a count with a unit. Link a
-  habit to a task and completing the task records the habit.
-- **A workout book** — routines hold exercises, and each session is a dated
-  column of reps and weights. Starting a session copies last time's numbers.
-- **Windows-native touches** — a tray icon with a hover preview, a sticky note
-  that can pin above other windows, `Ctrl+Shift+Space` quick add from
-  anywhere, reminders, and start-with-Windows.
-- **Undo and redo** that survive a restart, because the log is in the database.
+The default vault is `%USERPROFILE%\Kairos`; an existing `Master Todo` vault is adopted.
+Settings shows the actual location.
 
-Full detail, including the keyboard map: [`windows-app/README.md`](windows-app/README.md).
-
-## Your data is a folder of files
-
-This is the part that matters. Everything lives in a vault of plain text —
-by default `%USERPROFILE%\Kairos`:
-
-```
-tasks/inbox.md     one file per project, one checklist item per task
-habits/2026-09.md  a month of ticks, numbers and journal
-workouts/push.md   a routine, its exercises, and every session
-settings.json      every switch on the Settings page
+```text
+tasks/inbox.md       tasks without a project
+habits/habits.md     habit definitions
+habits/2026-09.md    daily values and monthly journal
+workouts/push.md     a routine and its sessions
+settings.json        preferences
+widget-layout.json  saved widget windows
 ```
 
-A task is an ordinary Markdown checklist item, so Obsidian renders a project
-file as a task list:
+The vault's generated README explains the text formats. Preserve IDs when editing existing
+records. External edits are detected by file contents, and app edits check for conflicts
+before writing. Unreadable files block import rather than silently removing their data.
+A conflicting or failed save is reported in the app.
 
-```markdown
-- [ ] Gym due:2026-09-22 at:17:00 repeat:"every day" #fitness !p1 ^7f3a9c2e-…
-  - [ ] warm up
-  > Bring the new shoes.
-```
+Exports stage their output and replace individual files atomically. The five latest changed
+exports keep original Markdown in `.kairos-backups` inside the vault. Database snapshots
+are also kept under `%APPDATA%\dev.kairos.desktop\backups` before imports.
+A multi-file export is not a filesystem-wide atomic transaction: recovery copies cover an
+interruption midway through it. Back up the vault independently for long-term history.
 
-**These files are the record.** The SQLite database is an index rebuilt from
-them — delete it and the next launch restores everything. Edit them in any
-editor, or point an AI agent at the folder, and the app picks the change up in
-about a second. Writing a line with no `^id` runs it through the same parser
-as the capture bar, so
+To recover, quit Kairos, copy the desired backup files into the matching vault folders, and
+reopen it. Undo history is database-only; external edits invalidate history for affected tasks.
+Turning the vault off makes SQLite the only active data store.
 
-```markdown
-- [ ] gym every day 5pm #health
-```
+## Build and test
 
-typed into a file becomes exactly the task typing it into the app would.
-
-Putting the vault in a synced folder or a git repo is, for now, most of what
-sync would give you.
-
-## Install
-
-Download the setup from [Releases](../../releases) and run it. The build is
-unsigned, so Windows will show "Windows protected your PC" the first time —
-More info → Run anyway.
-
-It installs as a single 12 MB executable. Rust links statically, the frontend
-is embedded in the binary, and the web view is the WebView2 runtime Windows 11
-already ships, so there is no runtime to lay down beside it.
-
-## Build it yourself
+Requires Windows, Rust 1.88+ with the MSVC toolchain, Visual Studio C++ build tools,
+and WebView2. The app frontend uses plain HTML/CSS/ES modules, with no bundler.
 
 ```sh
-cargo run -p kairos-windows      # the whole dev loop
+cargo run -p kairos-windows
 cargo test --workspace
-cargo tauri build                # installers -> target/release/bundle
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo install tauri-cli --version "^2" --locked
+cargo tauri build
 ```
 
-Needs Rust 1.88+ and the MSVC toolchain. There is **no npm and no bundler** —
-the frontend is plain HTML, CSS and ES modules, so `cargo run` is all of it.
+Installers are written under `target/release/bundle/nsis` and `target/release/bundle/msi`.
+Unsigned installers may trigger Windows security prompts. Only install builds you trust.
+The app uses Windows WebView2 rather than shipping a browser engine beside its executable.
 
-## Layout
+Headless frontend tests use Node and Playwright as optional development tools; neither is
+needed to build or run the app. See [the Windows README](windows-app/README.md).
+CI runs Rust tests, formatting, lint checks and the frontend regressions on Windows.
 
-```
-/core          task model, parsing, recurrence, the vault, the store
-/windows-app   the Tauri shell: tray, widget, hotkey, calendar, UI
-```
+## Repository
 
-Linux and mobile clients and a self-hostable sync server are planned. They get
-directories when they get code.
+- `core/`: task semantics, parsing, recurrence, vault, SQLite index and layout models.
+- `windows-app/`: Tauri integration, static frontend and browser tests.
 
-## Licence
+Linux, mobile and a self-hosted sync backend are future work. Concurrent edits in a synced
+folder can conflict; this release does not provide multi-device merge semantics.
 
-MIT — see [LICENSE](LICENSE).
+## License
+
+[MIT](LICENSE), Copyright 2026 Ahmed Ibrahim.
