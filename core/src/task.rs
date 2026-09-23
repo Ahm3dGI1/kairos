@@ -7,10 +7,6 @@ use uuid::Uuid;
 pub type TaskId = Uuid;
 
 /// A task, however it was captured.
-///
-/// Only `title` is required: "buy milk" is a complete task. Every field is
-/// public and mutable so a client can let the user override anything the parser
-/// inferred — see [`ParseResult`](crate::ParseResult) for what was inferred.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
     pub id: TaskId,
@@ -24,6 +20,8 @@ pub struct Task {
     /// Local wall-clock time.
     pub time: Option<NaiveTime>,
     pub recurrence: Option<Recurrence>,
+    #[serde(default)]
+    pub recurrence_anchor: Option<NaiveDate>,
     /// Occurrences moved or skipped without breaking the series.
     pub exceptions: Vec<Exception>,
     pub priority: Priority,
@@ -37,12 +35,6 @@ pub struct Task {
     #[serde(default)]
     pub checklist: Checklist,
     /// A habit this task stands for.
-    ///
-    /// "Gym" is both a thing to do five times a week and a thing to have a run
-    /// of, and keeping them as two separate records means ticking both by
-    /// hand. Completing a linked task ticks the habit for that day — one
-    /// direction only, because completing is the act and the tick is its
-    /// record, not the other way round.
     #[serde(default)]
     pub habit: Option<crate::daily::HabitId>,
     /// When this was completed. For a recurring task, completion advances
@@ -60,6 +52,7 @@ impl Task {
             due: None,
             time: None,
             recurrence: None,
+            recurrence_anchor: None,
             exceptions: Vec::new(),
             priority: Priority::None,
             tags: Vec::new(),
@@ -151,11 +144,6 @@ impl Subtask {
 }
 
 /// How a task's subtask list is meant to be read.
-///
-/// The second mode is the one that makes a standing task useful: "Learning"
-/// repeats every week and holds a list of things to learn, and each week you
-/// tick one off. The occurrence is done because an item was done — the rest of
-/// the list is simply what is left, not work that is outstanding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Checklist {
     /// Every item is part of this one task. Completing the task is up to you.
@@ -258,11 +246,6 @@ impl FromIterator<Weekday> for WeekdaySet {
 }
 
 /// How a task repeats.
-///
-/// Deliberately narrower than RFC 5545 — it covers the phrases the parser
-/// recognizes and nothing more. "Every weekday" and "every weekend" are not
-/// separate variants: they are [`Weekly`](Recurrence::Weekly) over the
-/// corresponding day set, which keeps the expansion engine to one weekly path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Recurrence {
     /// "every day", "daily"

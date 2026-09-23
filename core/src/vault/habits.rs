@@ -128,7 +128,7 @@ pub fn write_month(
     let mut out = format!("# {} {year}\n", MONTHS[(month as usize - 1).min(11)]);
 
     let mut ticks: Vec<(String, Vec<u32>)> = Vec::new();
-    for habit in habits.iter().filter(|h| !h.kind.is_numeric()) {
+    for habit in habits.iter() {
         let days: Vec<u32> =
             logs.iter().filter(|log| log.is_done(habit.id)).map(|log| log.date.day()).collect();
         if !days.is_empty() {
@@ -148,10 +148,8 @@ pub fn write_month(
     // Screen time and sleep used to be the only two and were written in by
     // name; they are ordinary habits now and reach the table the same way any
     // other number does.
-    let columns: Vec<&Habit> = habits
-        .iter()
-        .filter(|h| h.kind.is_numeric() && logs.iter().any(|log| log.value(h.id).is_some()))
-        .collect();
+    let columns: Vec<&Habit> =
+        habits.iter().filter(|h| logs.iter().any(|log| log.value(h.id).is_some())).collect();
     let mut measured: Vec<&DayLog> =
         logs.iter().filter(|log| columns.iter().any(|h| log.value(h.id).is_some())).collect();
 
@@ -165,7 +163,17 @@ pub fn write_month(
         for log in measured {
             let cells: Vec<String> = columns
                 .iter()
-                .map(|h| log.value(h.id).map(|v| h.kind.format(v)).unwrap_or_default())
+                .map(|h| {
+                    log.value(h.id)
+                        .map(|v| {
+                            if h.kind == HabitKind::Check {
+                                v.to_string()
+                            } else {
+                                h.kind.format(v)
+                            }
+                        })
+                        .unwrap_or_default()
+                })
                 .collect();
             out.push_str(&format!("| {} | {} |\n", log.date.day(), cells.join(" | ")));
         }
@@ -174,10 +182,17 @@ pub fn write_month(
     if !journal.entries.is_empty() {
         out.push_str("\n## Journal\n");
         for entry in &journal.entries {
-            out.push_str(&format!("\n### {}\n", entry.title.replace('\n', " ").trim()));
+            out.push_str(&format!(
+                "\n### {} ^{}\n",
+                entry.title.replace('\n', " ").trim(),
+                entry.id
+            ));
             if !entry.body.trim().is_empty() {
-                out.push_str(entry.body.trim_end());
-                out.push('\n');
+                for line in entry.body.lines() {
+                    out.push_str("> ");
+                    out.push_str(line);
+                    out.push('\n');
+                }
             }
         }
     }
@@ -187,6 +202,16 @@ pub fn write_month(
 
 /// Reads one month file. `known` maps habit name (lowercased) to its id.
 pub fn read_month(text: &str, year: i32, month: u32, known: &HashMap<String, HabitId>) -> Month {
+    read_month_with_kinds(text, year, month, known, &HashMap::new())
+}
+
+pub fn read_month_with_kinds(
+    text: &str,
+    year: i32,
+    month: u32,
+    known: &HashMap<String, HabitId>,
+    kinds: &HashMap<HabitId, HabitKind>,
+) -> Month {
     let mut result = Month::default();
     let mut logs: HashMap<u32, DayLog> = HashMap::new();
     let mut section = Section::None;
@@ -215,11 +240,26 @@ pub fn read_month(text: &str, year: i32, month: u32, known: &HashMap<String, Hab
         if section == Section::Journal {
             if let Some(title) = trimmed.strip_prefix("### ") {
                 flush(&mut entry, &mut body, &mut result.journal);
-                entry = Some(JournalEntry::new(title.trim()));
+                let (title, id) = title
+                    .rsplit_once(" ^")
+                    .and_then(|(t, id)| Uuid::parse_str(id).ok().map(|id| (t, id)))
+                    .unwrap_or_else(|| {
+                        (
+                            title.trim(),
+                            Uuid::new_v5(
+                                &Uuid::NAMESPACE_OID,
+                                format!("journal:{year}:{month}:{}:{title}", result.journal.len())
+                                    .as_bytes(),
+                            ),
+                        )
+                    });
+                let mut fresh = JournalEntry::new(title);
+                fresh.id = id;
+                entry = Some(fresh);
                 continue;
             }
             if entry.is_some() {
-                body.push_str(line);
+                body.push_str(line.strip_prefix("> ").unwrap_or(line));
                 body.push('\n');
             }
             continue;
@@ -266,7 +306,12 @@ pub fn read_month(text: &str, year: i32, month: u32, known: &HashMap<String, Hab
                     // The kind is read off the first value the column shows:
                     // "7h 30m" is a length of time, "42" is a count. Guessing
                     // once is what lets a column be written by hand.
-                    let kind = resolved.clone().unwrap_or_else(|| guess_kind(cell));
+                    let kind = known
+                        .get(&name.to_lowercase())
+                        .and_then(|id| kinds.get(id))
+                        .cloned()
+                        .or_else(|| resolved.clone())
+                        .unwrap_or_else(|| guess_kind(cell));
                     let id = resolve(&mut result, known, name, kind.clone());
                     *resolved = Some(kind.clone());
                     if let Some(value) = kind.parse_value(cell) {
@@ -336,7 +381,9 @@ fn resolve(
 /// What kind of number a cell holds, from how it is written.
 fn guess_kind(cell: &str) -> HabitKind {
     let lowered = cell.to_lowercase();
-    if lowered.contains('h') || lowered.contains('m') {
+    if (lowered.contains('h') || lowered.contains('m'))
+        && crate::daily::parse_duration(cell).is_some()
+    {
         HabitKind::Duration
     } else {
         HabitKind::Number { unit: String::new() }

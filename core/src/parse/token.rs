@@ -42,10 +42,6 @@ impl Token {
 }
 
 /// Tokenizes, marking any token that overlaps one of `excluded` as off limits.
-///
-/// This is how "un-parsing" works: the client remembers which byte ranges the
-/// user reverted and hands them back, and those words stay ordinary text no
-/// matter how much they look like a date.
 pub fn tokenize_excluding(input: &str, excluded: &[Range<usize>]) -> Vec<Token> {
     let mut tokens = tokenize_all(input);
     for token in &mut tokens {

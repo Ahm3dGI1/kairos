@@ -79,10 +79,6 @@ pub fn parse_at(input: &str, now: NaiveDateTime) -> ParseResult {
 }
 
 /// Parses a line, leaving the given byte ranges as plain text.
-///
-/// This is what makes an automatic parse undoable: the capture field highlights
-/// what it recognized, and pressing backspace on a highlight hands that range
-/// back here as excluded, so the words stay in the title instead.
 pub fn parse_excluding(input: &str, now: NaiveDateTime, excluded: &[Range<usize>]) -> ParseResult {
     let mut tokens = tokenize_excluding(input, excluded);
     let mut result = ParseResult {
@@ -159,10 +155,6 @@ pub fn parse_excluding(input: &str, now: NaiveDateTime, excluded: &[Range<usize>
 }
 
 /// Reads a bare recurrence phrase — "every day", "every monday" — as a rule.
-///
-/// The detail pane's repeat picker uses this rather than mapping its own menu
-/// onto rule variants, so the picker and the typed line can never disagree
-/// about what "every other week" means.
 pub fn recurrence_from_phrase(phrase: &str) -> Option<crate::task::Recurrence> {
     let mut tokens = tokenize_excluding(phrase, &[]);
     recurrence::extract(&mut tokens).map(|(rule, _)| rule)

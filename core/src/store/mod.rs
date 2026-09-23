@@ -86,6 +86,19 @@ pub struct Store {
 }
 
 impl Store {
+    pub fn begin_edit(&self) -> Result<()> {
+        self.conn.execute_batch("SAVEPOINT app_edit")?;
+        Ok(())
+    }
+    pub fn commit_edit(&self) -> Result<()> {
+        self.conn.execute_batch("RELEASE app_edit")?;
+        Ok(())
+    }
+    pub fn rollback_edit(&self) -> Result<()> {
+        self.conn.execute_batch("ROLLBACK TO app_edit; RELEASE app_edit")?;
+        Ok(())
+    }
+
     /// Opens (creating if needed) the database at `path`.
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         Self::from_connection(Connection::open(path)?)
@@ -100,7 +113,12 @@ impl Store {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         let store = Self { conn };
-        store.migrate()?;
+        store.conn.execute_batch("BEGIN IMMEDIATE")?;
+        if let Err(error) = store.migrate() {
+            let _ = store.conn.execute_batch("ROLLBACK");
+            return Err(error);
+        }
+        store.conn.execute_batch("COMMIT")?;
         Ok(store)
     }
 
@@ -250,14 +268,15 @@ impl Store {
             )?;
             self.lift_metrics_into_habits()?;
         }
+        if version < 8 {
+            self.conn.execute_batch(
+                "ALTER TABLE tasks ADD COLUMN recurrence_anchor TEXT; PRAGMA user_version = 8;",
+            )?;
+        }
         Ok(())
     }
 
     /// Turns the old `screen_minutes` and `sleep_minutes` columns into two
-    /// ordinary duration habits, carrying every day's number across.
-    ///
-    /// Only creates a habit that some day actually used: a database that never
-    /// recorded sleep should not grow a Sleep row for it.
     fn lift_metrics_into_habits(&self) -> Result<()> {
         let mut stmt = self.conn.prepare(
             "SELECT date, screen_minutes, sleep_minutes FROM day_logs
@@ -448,10 +467,6 @@ impl Store {
     }
 
     /// Starts a session, carrying the previous one's numbers across.
-    ///
-    /// Copying last time is the difference between logging a workout and
-    /// re-typing it: almost every set repeats, and the ones that change are the
-    /// interesting ones.
     pub fn start_session(&mut self, routine: RoutineId, date: NaiveDate) -> Result<SessionLog> {
         // One session per routine per day. Pressing "start" again is someone
         // coming back to the same workout, not beginning a second one — and
@@ -521,13 +536,6 @@ impl Store {
     }
 
     /// Carries anything already written in the old per-day journals across into
-    /// the month pages, so upgrading never silently drops what someone wrote.
-    /// Runs during the v3 migration, so it reads and writes the columns that
-    /// exist *at v3* rather than going through [`Store::all_day_logs`].
-    ///
-    /// A migration that calls the ordinary accessors is a migration that
-    /// breaks the next time the schema moves: those queries describe today's
-    /// table, and this one is running against an older one.
     fn fold_day_journals_into_months(&self) -> Result<()> {
         let mut stmt = self.conn.prepare("SELECT date, journal FROM day_logs")?;
         let rows: Vec<(String, String)> = stmt
@@ -569,13 +577,13 @@ impl Store {
             "INSERT INTO tasks
                  (id, title, notes, due, time, recurrence, exceptions,
                   priority, tags, project, subtasks, completed_at, created_at,
-                  checklist, habit)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                  checklist, habit, recurrence_anchor)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
              ON CONFLICT(id) DO UPDATE SET
                  title = ?2, notes = ?3, due = ?4, time = ?5, recurrence = ?6,
                  exceptions = ?7, priority = ?8, tags = ?9, project = ?10,
                  subtasks = ?11, completed_at = ?12, created_at = ?13,
-                 checklist = ?14, habit = ?15",
+                 checklist = ?14, habit = ?15, recurrence_anchor = ?16",
             params![
                 r.id,
                 r.title,
@@ -592,6 +600,7 @@ impl Store {
                 r.created_at,
                 r.checklist,
                 r.habit,
+                r.recurrence_anchor,
             ],
         )?;
         Ok(())
@@ -615,10 +624,6 @@ impl Store {
     }
 
     /// The tasks a view shows, ordered.
-    ///
-    /// Filtering happens in Rust rather than SQL: recurrence expansion decides
-    /// membership for half these views, and that logic belongs in the core
-    /// where every client shares it, not duplicated into a query.
     pub fn query(&self, filter: &Filter, sort: Sort, today: NaiveDate) -> Result<Vec<Task>> {
         let mut tasks: Vec<Task> =
             self.all()?.into_iter().filter(|t| filter.matches(t, today)).collect();
@@ -631,6 +636,7 @@ impl Store {
     pub fn complete(&mut self, id: TaskId, today: NaiveDate) -> Result<Task> {
         let mut task = self.get(id)?.ok_or(StoreError::NotFound(id))?;
         self.record_undo(UndoKind::Complete, id, Some(&task))?;
+        self.record_habit_before("undo_log", &task, today)?;
         recur::complete_occurrence(&mut task, today);
         self.write(&task)?;
 
@@ -647,10 +653,72 @@ impl Store {
         Ok(task)
     }
 
+    fn record_habit_before(&self, table: &str, task: &Task, date: NaiveDate) -> Result<()> {
+        if let Some(id) = task.habit {
+            let done = self.day_log(date)?.is_done(id);
+            self.attach_habit_history(table, (id, date, done))?;
+        }
+        Ok(())
+    }
+
+    fn attach_habit_history(&self, table: &str, value: (HabitId, NaiveDate, bool)) -> Result<()> {
+        let before: Option<String> = self.conn.query_row(
+            &format!("SELECT before FROM {table} ORDER BY seq DESC LIMIT 1"),
+            [],
+            |r| r.get(0),
+        )?;
+        if let Some(before) = before {
+            let mut json: serde_json::Value = serde_json::from_str(&before)?;
+            json["_habit_before"] = serde_json::to_value(value)?;
+            self.conn.execute(
+                &format!(
+                    "UPDATE {table} SET before = ?1 WHERE seq = (SELECT MAX(seq) FROM {table})"
+                ),
+                [json.to_string()],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn complete_subtask(
+        &mut self,
+        id: TaskId,
+        subtask: uuid::Uuid,
+        today: NaiveDate,
+    ) -> Result<Task> {
+        let mut task = self.get(id)?.ok_or(StoreError::NotFound(id))?;
+        let Some(item) = task.subtasks.iter_mut().find(|s| s.id == subtask) else {
+            return Ok(task);
+        };
+        let completing = !item.done
+            && task.checklist == crate::task::Checklist::OnePerOccurrence
+            && task.is_recurring();
+        if completing {
+            let mut completed = self.complete(id, today)?;
+            if let Some(item) = completed.subtasks.iter_mut().find(|s| s.id == subtask) {
+                item.done = true;
+            }
+            self.write(&completed)?;
+            Ok(completed)
+        } else {
+            if let Some(item) = task.subtasks.iter_mut().find(|s| s.id == subtask) {
+                item.done = !item.done;
+            }
+            self.save(&task)?;
+            Ok(task)
+        }
+    }
+
     /// Reopens a completed task.
     pub fn uncomplete(&mut self, id: TaskId) -> Result<Task> {
         let mut task = self.get(id)?.ok_or(StoreError::NotFound(id))?;
         self.record_undo(UndoKind::Update, id, Some(&task))?;
+        if let (Some(habit), Some(date)) = (task.habit, task.completed_at) {
+            self.record_habit_before("undo_log", &task, date)?;
+            let mut log = self.day_log(date)?;
+            log.habits_done.retain(|id| *id != habit);
+            self.save_day_log(&log)?;
+        }
         task.completed_at = None;
         self.write(&task)?;
         Ok(task)
@@ -695,6 +763,20 @@ impl Store {
         let id = uuid::Uuid::parse_str(&task_id).ok();
         let current = id.and_then(|id| self.get(id).ok().flatten());
         self.push(onto, &kind, &task_id, current.as_ref())?;
+        if let Some(json) = &before {
+            let data: serde_json::Value = serde_json::from_str(json)?;
+            if let Some(value) = data.get("_habit_before") {
+                let (id, date, done): (HabitId, NaiveDate, bool) =
+                    serde_json::from_value(value.clone())?;
+                let mut log = self.day_log(date)?;
+                self.attach_habit_history(onto, (id, date, log.is_done(id)))?;
+                log.habits_done.retain(|h| *h != id);
+                if done {
+                    log.habits_done.push(id);
+                }
+                self.save_day_log(&log)?;
+            }
+        }
 
         let kind = UndoKind::parse(&kind);
         let task = match before {
@@ -962,11 +1044,6 @@ impl Store {
     }
 
     /// Writes a month page, or removes it once every entry has been emptied.
-    /// Writes a month's journal, dropping any entry left blank.
-    ///
-    /// Clearing an entry is how you delete one, which is the same bargain the
-    /// rest of the app makes: an emptied habit cell records nothing, an
-    /// emptied set did not happen, a day with nothing on it keeps no row.
     pub fn save_month_journal(&mut self, journal: &MonthJournal) -> Result<()> {
         let mut journal = journal.clone();
         journal.prune();

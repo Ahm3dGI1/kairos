@@ -1,6 +1,7 @@
 pub mod agenda;
 pub mod daily;
 pub mod filter;
+pub mod io;
 pub mod parse;
 pub mod recur;
 pub mod settings;
@@ -21,3 +22,5 @@ pub use store::{Snapshot, Store, StoreError, UndoKind, Undone};
 pub use task::{
     Checklist, Exception, ExceptionAction, Priority, Recurrence, Subtask, Task, TaskId, WeekdaySet,
 };
+
+pub mod widgets;

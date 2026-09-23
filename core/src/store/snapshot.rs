@@ -6,10 +6,6 @@ use crate::task::Task;
 use crate::workout::{Exercise, Routine, SessionLog};
 
 /// Everything the app stores, except the undo and redo logs.
-///
-/// Those stay out on purpose: they describe a session's history of edits, not
-/// the user's data, and replaying them against a world rebuilt from files would
-/// be undoing onto something that never happened.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Snapshot {
@@ -57,10 +53,6 @@ impl Store {
     }
 
     /// Replaces everything with `snapshot`, in one transaction.
-    ///
-    /// Nothing here touches the undo log: an import is not an edit the user
-    /// made, and offering to undo it would mean offering to undo whatever they
-    /// just typed in their editor.
     pub fn restore(&mut self, snapshot: &Snapshot) -> Result<()> {
         self.conn.execute_batch("BEGIN IMMEDIATE")?;
         match self.restore_inner(snapshot) {
@@ -70,6 +62,34 @@ impl Store {
             }
             Err(error) => {
                 // A half-applied import would be worse than a failed one.
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(error)
+            }
+        }
+    }
+
+    pub fn restore_external(&mut self, snapshot: &Snapshot) -> Result<()> {
+        let changed: Vec<_> = self
+            .all()?
+            .into_iter()
+            .filter(|task| snapshot.tasks.iter().find(|t| t.id == task.id) != Some(task))
+            .map(|t| t.id.to_string())
+            .collect();
+        self.conn.execute_batch("BEGIN IMMEDIATE")?;
+        let result = (|| {
+            self.restore_inner(snapshot)?;
+            for id in changed {
+                self.conn.execute("DELETE FROM undo_log WHERE task_id = ?1", [&id])?;
+                self.conn.execute("DELETE FROM redo_log WHERE task_id = ?1", [&id])?;
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                self.conn.execute_batch("COMMIT")?;
+                Ok(())
+            }
+            Err(error) => {
                 let _ = self.conn.execute_batch("ROLLBACK");
                 Err(error)
             }

@@ -18,6 +18,12 @@ const SUBTASK_NS: Uuid = Uuid::from_bytes([
 pub fn write_file(project: Option<&str>, tasks: &[Task], habits: &HabitNames) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {}\n\n", project.unwrap_or("Inbox")));
+    if let Some(project) = project {
+        out.push_str(&format!(
+            "<!-- kairos-project: {} -->\n",
+            serde_json::to_string(project).unwrap()
+        ));
+    }
     for task in tasks {
         write_task(task, task.habit.and_then(|id| habits.get(&id)).map(String::as_str), &mut out);
     }
@@ -36,6 +42,9 @@ fn write_task(task: &Task, habit_name: Option<&str>, out: &mut String) {
 
     if let Some(due) = task.due {
         out.push_str(&format!(" due:{}", due.format(DATE)));
+    }
+    if let Some(anchor) = task.recurrence_anchor {
+        out.push_str(&format!(" anchor:{anchor}"));
     }
     if let Some(time) = task.time {
         out.push_str(&format!(" at:{}", time.format(TIME)));
@@ -78,7 +87,7 @@ fn write_task(task: &Task, habit_name: Option<&str>, out: &mut String) {
     for sub in &task.subtasks {
         out.push_str(if sub.done { "  - [x] " } else { "  - [ ] " });
         out.push_str(&one_line(&sub.title));
-        out.push('\n');
+        out.push_str(&format!(" ^{}\n", sub.id));
     }
     for line in task.notes.lines() {
         out.push_str(if line.is_empty() { ">" } else { "> " });
@@ -93,7 +102,10 @@ fn write_task(task: &Task, habit_name: Option<&str>, out: &mut String) {
 /// `today` dates anything the file did not say, and anchors the
 /// natural-language parse of hand-written lines.
 pub fn read_file(text: &str, today: NaiveDate, habits: &HabitIds) -> (Option<String>, Vec<Task>) {
-    let mut project = None;
+    let mut project = text
+        .lines()
+        .find_map(|l| l.strip_prefix("<!-- kairos-project: ").and_then(|s| s.strip_suffix(" -->")))
+        .and_then(|s| serde_json::from_str::<String>(s).ok());
     let mut tasks: Vec<Task> = Vec::new();
 
     for raw in text.lines() {
@@ -113,10 +125,13 @@ pub fn read_file(text: &str, today: NaiveDate, habits: &HabitIds) -> (Option<Str
                 // An indented checkbox belongs to the task above it.
                 if let Some(task) = tasks.last_mut() {
                     let (done, title) = body;
-                    let title = strip_id(title).0.trim().to_string();
+                    let (title, saved_id) = strip_id(title);
+                    let title = title.trim().to_string();
                     if !title.is_empty() {
                         task.subtasks.push(Subtask {
-                            id: subtask_id(task.id, &title, task.subtasks.len()),
+                            id: saved_id.unwrap_or_else(|| {
+                                subtask_id(task.id, &title, task.subtasks.len())
+                            }),
                             title,
                             done,
                         });
@@ -213,6 +228,7 @@ fn is_meta(token: &str) -> bool {
         token.split_once(':').map(|(key, _)| key),
         Some(
             "due"
+                | "anchor"
                 | "at"
                 | "repeat"
                 | "every"
@@ -279,6 +295,7 @@ fn apply(task: &mut Task, token: &str, habits: &HabitIds) {
         // An unknown name links to nothing rather than inventing a habit: a
         // habit is created in the habit files, and a typo here should be
         // visible as a link that did not take, not as a second habit.
+        "anchor" => task.recurrence_anchor = NaiveDate::parse_from_str(&value, DATE).ok(),
         "habit" => task.habit = habits.get(&value.to_lowercase()).copied(),
         _ => {}
     }

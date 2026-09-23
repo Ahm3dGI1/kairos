@@ -91,11 +91,6 @@ fn matches_text(task: &Task, needle: &str) -> bool {
 }
 
 /// Narrowing applied on top of the agenda: a project, a tag, a search, or any
-/// combination.
-///
-/// Separate from [`Filter`] because it deliberately says nothing about
-/// completion — the agenda decides that on its own, so that searching with
-/// completed work shown finds completed work too.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Narrow {
     pub project: Option<String>,

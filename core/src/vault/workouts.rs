@@ -28,6 +28,10 @@ pub fn session_id(routine: RoutineId, date: NaiveDate) -> Uuid {
 /// Renders one routine's whole history, newest session first.
 pub fn write_routine(routine: &Routine, exercises: &[Exercise], sessions: &[SessionLog]) -> String {
     let mut out = format!("# {}\n", routine.name.trim());
+    let ids = serde_json::json!({ "routine": routine.id,
+        "exercises": exercises.iter().map(|e| (one_line(&e.name), e.id)).collect::<std::collections::BTreeMap<_,_>>(),
+        "sessions": sessions.iter().map(|s| (s.session.date.to_string(), s.session.id)).collect::<std::collections::BTreeMap<_,_>>() });
+    let metadata = format!("<!-- kairos-ids: {ids} -->\n");
 
     if !exercises.is_empty() {
         out.push_str("\n## Exercises\n\n");
@@ -59,6 +63,7 @@ pub fn write_routine(routine: &Routine, exercises: &[Exercise], sessions: &[Sess
         }
     }
 
+    out.push_str(&metadata);
     out
 }
 
@@ -170,6 +175,41 @@ pub fn read_routine(text: &str, fallback_name: &str) -> RoutineFile {
         }
     }
 
+    let mut routine = routine;
+    if let Some(ids) = text
+        .lines()
+        .find_map(|l| l.strip_prefix("<!-- kairos-ids: ").and_then(|s| s.strip_suffix(" -->")))
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+    {
+        if let Some(id) = ids["routine"].as_str().and_then(|s| Uuid::parse_str(s).ok()) {
+            routine.id = id;
+        }
+        let mut mapping = std::collections::HashMap::new();
+        for exercise in &mut exercises {
+            let old = exercise.id;
+            if let Some(id) =
+                ids["exercises"][&exercise.name].as_str().and_then(|s| Uuid::parse_str(s).ok())
+            {
+                exercise.id = id;
+            }
+            exercise.routine = routine.id;
+            mapping.insert(old, exercise.id);
+        }
+        for log in &mut sessions {
+            log.session.routine = routine.id;
+            if let Some(id) = ids["sessions"][log.session.date.to_string()]
+                .as_str()
+                .and_then(|s| Uuid::parse_str(s).ok())
+            {
+                log.session.id = id;
+            }
+            for set in &mut log.sets {
+                if let Some(id) = mapping.get(&set.exercise) {
+                    set.exercise = *id;
+                }
+            }
+        }
+    }
     RoutineFile { routine, exercises, sessions }
 }
 

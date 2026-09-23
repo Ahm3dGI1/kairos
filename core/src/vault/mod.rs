@@ -43,7 +43,122 @@ impl Vault {
 
     /// Writes the snapshot out, touching only the files whose contents differ.
     /// Returns whether anything actually changed on disk.
+    pub fn fingerprint(&self) -> std::io::Result<std::collections::BTreeMap<PathBuf, Vec<u8>>> {
+        let mut files = std::collections::BTreeMap::new();
+        for dir in [TASKS_DIR, HABITS_DIR, WORKOUTS_DIR] {
+            for (path, text) in markdown_in(&self.root.join(dir))? {
+                files.insert(
+                    path.strip_prefix(&self.root).unwrap().to_path_buf(),
+                    text.into_bytes(),
+                );
+            }
+        }
+        Ok(files)
+    }
+
     pub fn write(&self, snapshot: &Snapshot) -> std::io::Result<bool> {
+        let before = self.fingerprint()?;
+        let after = self.write_checked(snapshot, &before)?;
+        Ok(after != before)
+    }
+
+    pub fn write_checked(
+        &self,
+        snapshot: &Snapshot,
+        before: &std::collections::BTreeMap<PathBuf, Vec<u8>>,
+    ) -> std::io::Result<std::collections::BTreeMap<PathBuf, Vec<u8>>> {
+        if self.fingerprint()? != *before {
+            return Err(std::io::Error::other("Vault changed before save; reload and retry"));
+        }
+        let stage =
+            Staging(std::env::temp_dir().join(format!("kairos-export-{}", uuid::Uuid::new_v4())));
+        let staged = Vault::new(&stage.0);
+        staged.write_inner(snapshot)?;
+        let desired = staged.fingerprint()?;
+        let mut changes = Vec::new();
+        for (path, bytes) in &desired {
+            if before.get(path) != Some(bytes) {
+                changes.push((path.clone(), Some(bytes.clone())));
+            }
+        }
+        for (path, bytes) in before {
+            if !desired.contains_key(path) && managed_file(path, bytes) {
+                changes.push((path.clone(), None));
+            }
+        }
+        if changes.is_empty() {
+            return Ok(before.clone());
+        }
+        let recovery = self.root.join(".kairos-backups").join(format!(
+            "{}-{}",
+            chrono::Utc::now().format("%Y%m%d%H%M%S%f"),
+            uuid::Uuid::new_v4()
+        ));
+        for (path, bytes) in before {
+            crate::io::atomic_write(&recovery.join(path), bytes)?;
+        }
+        let mut applied: Vec<(PathBuf, Option<Vec<u8>>)> = Vec::new();
+        let result = (|| {
+            for (path, bytes) in &changes {
+                let full = self.root.join(path);
+                let current = match std::fs::read(&full) {
+                    Ok(bytes) => Some(bytes),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(e) => return Err(e),
+                };
+                if current.as_ref() != before.get(path) {
+                    return Err(std::io::Error::other(
+                        "An editor changed a file during save; reload and retry",
+                    ));
+                }
+                if let Some(bytes) = bytes {
+                    crate::io::atomic_write(&full, bytes)?;
+                } else {
+                    std::fs::remove_file(&full)?;
+                }
+                applied.push((path.clone(), bytes.clone()));
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            for (path, written) in applied.iter().rev() {
+                let full = self.root.join(path);
+                // Never roll back over a newer edit made by another program.
+                if std::fs::read(&full).ok() != *written {
+                    continue;
+                }
+                if let Some(bytes) = before.get(path) {
+                    let _ = crate::io::atomic_write(&full, bytes);
+                } else {
+                    let _ = std::fs::remove_file(&full);
+                }
+            }
+            return Err(error);
+        }
+        let readme = self.root.join("README.md");
+        if !readme.exists() {
+            let _ = crate::io::atomic_write(&readme, README.as_bytes());
+        }
+        if let Ok(entries) = std::fs::read_dir(self.root.join(".kairos-backups")) {
+            let mut paths: Vec<_> =
+                entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()).collect();
+            paths.sort();
+            for path in paths.iter().rev().skip(5) {
+                let _ = std::fs::remove_dir_all(path);
+            }
+        }
+        let mut written = before.clone();
+        for (path, bytes) in changes {
+            if let Some(bytes) = bytes {
+                written.insert(path, bytes);
+            } else {
+                written.remove(&path);
+            }
+        }
+        Ok(written)
+    }
+
+    fn write_inner(&self, snapshot: &Snapshot) -> std::io::Result<bool> {
         let mut changed = false;
 
         std::fs::create_dir_all(&self.root)?;
@@ -62,10 +177,19 @@ impl Vault {
         let dir = self.root.join(TASKS_DIR);
         std::fs::create_dir_all(&dir)?;
         let mut expected = HashSet::new();
+        let project_slugs: Vec<String> =
+            by_project.keys().map(|p| tasks::slug(p.as_deref())).collect();
         for (project, mut group) in by_project {
             // A stable order, so the file does not reshuffle between writes.
             group.sort_by_key(|t| (t.due, t.created_at, t.id));
-            let name = format!("{}.md", tasks::slug(project.as_deref()));
+            let slug = tasks::slug(project.as_deref());
+            let name = safe_name(
+                &slug,
+                project.as_deref().unwrap_or(""),
+                project.is_some()
+                    && (slug == "inbox"
+                        || project_slugs.iter().filter(|s| **s == slug).count() > 1),
+            );
             expected.insert(name.clone());
             changed |= write_if_changed(
                 &dir.join(name),
@@ -131,7 +255,10 @@ impl Vault {
                 .cloned()
                 .collect();
 
-            let name = format!("{}.md", workouts::slug(&routine.name));
+            let slug = workouts::slug(&routine.name);
+            let collision =
+                snapshot.routines.iter().filter(|r| workouts::slug(&r.name) == slug).count() > 1;
+            let name = safe_name(&slug, &routine.id.to_string(), collision);
             expected.insert(name.clone());
             changed |= write_if_changed(
                 &dir.join(name),
@@ -144,20 +271,16 @@ impl Vault {
     }
 
     /// Reads the whole vault back.
-    ///
-    /// `today` dates anything a hand-written line left unsaid. Unreadable files
-    /// are skipped rather than failing the import: one malformed file should
-    /// cost you that file, not the app.
     pub fn read(&self, today: NaiveDate) -> std::io::Result<Snapshot> {
         let mut snapshot = Snapshot::default();
 
         // Habits first: a task may name one, and the name only resolves once
         // the definitions are in hand.
-        self.read_habits_into(&mut snapshot, today);
+        self.read_habits_into(&mut snapshot, today)?;
         let by_name: tasks::HabitIds =
             snapshot.habits.iter().map(|h| (h.name.to_lowercase(), h.id)).collect();
 
-        for (path, text) in markdown_in(&self.root.join(TASKS_DIR)) {
+        for (path, text) in markdown_in(&self.root.join(TASKS_DIR))? {
             let (heading, mut found) = tasks::read_file(&text, today, &by_name);
             let project = heading.or_else(|| {
                 let stem = path.file_stem()?.to_string_lossy().to_string();
@@ -169,7 +292,9 @@ impl Vault {
             snapshot.tasks.append(&mut found);
         }
 
-        for (index, (path, text)) in markdown_in(&self.root.join(WORKOUTS_DIR)).enumerate() {
+        for (index, (path, text)) in
+            markdown_in(&self.root.join(WORKOUTS_DIR))?.into_iter().enumerate()
+        {
             let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
             let mut file = workouts::read_routine(&text, &stem);
             file.routine.position = index as i64;
@@ -182,22 +307,21 @@ impl Vault {
     }
 
     /// Reads the habit definitions and every month file into `snapshot`.
-    ///
-    /// Separate from the rest of [`Vault::read`] because it has to run first:
-    /// a task line can name a habit, and the name only resolves once the
-    /// definitions are in hand.
-    fn read_habits_into(&self, snapshot: &mut Snapshot, today: NaiveDate) {
+    fn read_habits_into(&self, snapshot: &mut Snapshot, today: NaiveDate) -> std::io::Result<()> {
         let dir = self.root.join(HABITS_DIR);
-        if let Ok(text) = std::fs::read_to_string(dir.join(HABITS_FILE)) {
-            snapshot.habits = habits::read_habits(&text, today);
+        match std::fs::read_to_string(dir.join(HABITS_FILE)) {
+            Ok(text) => snapshot.habits = habits::read_habits(&text, today),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
         }
         let mut known: HashMap<String, uuid::Uuid> =
             snapshot.habits.iter().map(|h| (h.name.to_lowercase(), h.id)).collect();
 
-        for (path, text) in markdown_in(&dir) {
+        for (path, text) in markdown_in(&dir)? {
             let name = path.file_name().unwrap_or_default().to_string_lossy();
             let Some((year, month)) = habits::month_of(&name) else { continue };
-            let mut found = habits::read_month(&text, year, month, &known);
+            let kinds = snapshot.habits.iter().map(|h| (h.id, h.kind.clone())).collect();
+            let mut found = habits::read_month_with_kinds(&text, year, month, &known, &kinds);
 
             // A month file naming a habit no definition knew about creates it —
             // which is what makes `- Swim: 5 6 7` in a text editor enough.
@@ -223,6 +347,46 @@ impl Vault {
             }
         }
         snapshot.day_logs.sort_by_key(|log| log.date);
+        Ok(())
+    }
+}
+
+struct Staging(PathBuf);
+impl Drop for Staging {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn managed_file(path: &Path, bytes: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(bytes);
+    match path.parent().and_then(|p| p.to_str()) {
+        Some("tasks") => text.lines().any(|l| l.starts_with("- [")),
+        Some("workouts") => {
+            text.contains("<!-- kairos-ids:")
+                || text.contains("## Exercises")
+                || text.lines().any(|l| l.starts_with("## 20"))
+        }
+        Some("habits") => {
+            path.file_name().and_then(|n| n.to_str()).is_some_and(|n| habits::month_of(n).is_some())
+        }
+        _ => false,
+    }
+}
+
+fn safe_name(slug: &str, identity: &str, collision: bool) -> String {
+    let reserved = matches!(slug, "con" | "prn" | "aux" | "nul")
+        || (slug.len() == 4
+            && (slug.starts_with("com") || slug.starts_with("lpt"))
+            && slug.ends_with(['1', '2', '3', '4', '5', '6', '7', '8', '9']));
+    if collision || reserved {
+        format!(
+            "{}-{}.md",
+            slug,
+            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, identity.as_bytes())
+        )
+    } else {
+        format!("{slug}.md")
     }
 }
 
@@ -231,7 +395,7 @@ fn write_if_changed(path: &Path, contents: &str) -> std::io::Result<bool> {
     if std::fs::read_to_string(path).is_ok_and(|existing| existing == contents) {
         return Ok(false);
     }
-    std::fs::write(path, contents)?;
+    crate::io::atomic_write(path, contents.as_bytes())?;
     Ok(true)
 }
 
@@ -250,6 +414,18 @@ fn prune(dir: &Path, expected: &HashSet<String>) -> std::io::Result<bool> {
         if expected.contains(&name) || name.eq_ignore_ascii_case("README.md") {
             continue;
         }
+        let text = std::fs::read_to_string(&path)?;
+        let managed = match dir.file_name().and_then(|s| s.to_str()) {
+            Some("tasks") => text.lines().any(|l| l.starts_with("- [")),
+            Some("workouts") => {
+                text.contains("## Exercises") || text.lines().any(|l| l.starts_with("## 20"))
+            }
+            Some("habits") => habits::month_of(&name).is_some(),
+            _ => false,
+        };
+        if !managed {
+            continue;
+        }
         std::fs::remove_file(&path)?;
         changed = true;
     }
@@ -261,19 +437,22 @@ fn is_markdown(path: &Path) -> bool {
 }
 
 /// Every `.md` file in a folder, sorted by name so reads are deterministic.
-fn markdown_in(dir: &Path) -> impl Iterator<Item = (PathBuf, String)> {
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| is_markdown(path))
-        .collect();
-    paths.sort();
-    paths.into_iter().filter_map(|path| {
-        let text = std::fs::read_to_string(&path).ok()?;
-        Some((path, text))
-    })
+fn markdown_in(dir: &Path) -> std::io::Result<Vec<(PathBuf, String)>> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    let mut files = Vec::new();
+    for entry in entries {
+        let path = entry?.path();
+        if is_markdown(&path) {
+            let text = std::fs::read_to_string(&path)?;
+            files.push((path, text));
+        }
+    }
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(files)
 }
 
 const README: &str = r#"# Your Kairos vault

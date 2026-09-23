@@ -187,7 +187,7 @@ impl Settings {
             std::fs::create_dir_all(parent)?;
         }
         let text = serde_json::to_string_pretty(self).unwrap_or_default();
-        std::fs::write(path, text + "\n")
+        crate::io::atomic_write(path.as_ref(), (text + "\n").as_bytes())
     }
 
     /// Every switch with its current value, ready to render.

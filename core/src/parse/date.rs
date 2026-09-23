@@ -65,7 +65,7 @@ fn match_at(
             return Some((date, 2, vec![note]));
         }
         let date = match next {
-            "week" => today + chrono::Duration::days(7),
+            "week" => today.checked_add_signed(chrono::Duration::days(7))?,
             "month" => add_months(today, 1),
             "year" => add_months(today, 12),
             _ => return None,
@@ -81,10 +81,10 @@ fn match_at(
         let n = words::cardinal(word_at(tokens, i + 1)?)?;
         let unit = word_at(tokens, i + 2)?;
         let date = match unit {
-            "day" | "days" => today + chrono::Duration::days(n as i64),
-            "week" | "weeks" => today + chrono::Duration::weeks(n as i64),
-            "month" | "months" => add_months(today, n as i32),
-            "year" | "years" => add_months(today, n as i32 * 12),
+            "day" | "days" => today.checked_add_signed(chrono::Duration::days(n as i64))?,
+            "week" | "weeks" => today.checked_add_signed(chrono::Duration::try_weeks(n as i64)?)?,
+            "month" | "months" => add_months(today, i32::try_from(n).ok()?),
+            "year" | "years" => add_months(today, i32::try_from(n).ok()?.checked_mul(12)?),
             _ => return None,
         };
         return plain(date, 3);
@@ -158,7 +158,9 @@ fn next_weekday(from: NaiveDate, weekday: Weekday, include_today: bool) -> Naive
 /// Month arithmetic that clamps rather than overflowing: Jan 31 + 1 month is
 /// the last day of February.
 fn add_months(date: NaiveDate, months: i32) -> NaiveDate {
-    let total = date.year() * 12 + date.month0() as i32 + months;
+    let Some(total) = (date.year() * 12 + date.month0() as i32).checked_add(months) else {
+        return date;
+    };
     let year = total.div_euclid(12);
     let month = total.rem_euclid(12) as u32 + 1;
     let day = date.day().min(days_in_month(year, month));

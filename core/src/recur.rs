@@ -7,10 +7,6 @@ use crate::task::{Checklist, Exception, ExceptionAction, Recurrence, Task, Weekd
 const MAX_STEPS: usize = 4096;
 
 /// The dates a task falls on within `from..=to`, exceptions applied.
-///
-/// A non-recurring task yields its due date if it lands in range. Dates come
-/// back sorted and deduplicated — a moved occurrence can otherwise collide with
-/// a natural one.
 pub fn occurrences(task: &Task, from: NaiveDate, to: NaiveDate) -> Vec<NaiveDate> {
     let Some(anchor) = task.due else { return Vec::new() };
     let Some(rule) = task.recurrence else {
@@ -18,15 +14,15 @@ pub fn occurrences(task: &Task, from: NaiveDate, to: NaiveDate) -> Vec<NaiveDate
     };
 
     let mut dates = Vec::new();
-    for raw in RawOccurrences::new(anchor, rule).take(MAX_STEPS) {
+    for raw in RawOccurrences::new(task.recurrence_anchor.unwrap_or(anchor), rule).take(MAX_STEPS) {
         // Occurrences are generated in order, so once the raw date passes the
         // window we are done — except that a moved one can land back inside it,
         // which is why the walk continues a bounded distance past `to`.
-        if raw > to + Duration::days(LOOKAHEAD_DAYS) {
+        if raw > to.checked_add_signed(Duration::days(LOOKAHEAD_DAYS)).unwrap_or(NaiveDate::MAX) {
             break;
         }
         if let Some(actual) = apply_exceptions(&task.exceptions, raw) {
-            if (from..=to).contains(&actual) {
+            if actual >= anchor && (from..=to).contains(&actual) {
                 dates.push(actual);
             }
         }
@@ -48,16 +44,17 @@ pub fn next_occurrence(task: &Task, on: NaiveDate) -> Option<NaiveDate> {
     };
 
     let mut best: Option<NaiveDate> = None;
-    for raw in RawOccurrences::new(anchor, rule).take(MAX_STEPS) {
+    for raw in RawOccurrences::new(task.recurrence_anchor.unwrap_or(anchor), rule).take(MAX_STEPS) {
         if let Some(actual) = apply_exceptions(&task.exceptions, raw) {
-            if actual >= on && best.is_none_or(|b| actual < b) {
+            if actual >= on.max(anchor) && best.is_none_or(|b| actual < b) {
                 best = Some(actual);
             }
         }
         // A raw date this far past the best candidate cannot be moved back
         // before it, so nothing better remains.
         if let Some(b) = best {
-            if raw > b + Duration::days(LOOKAHEAD_DAYS) {
+            if raw > b.checked_add_signed(Duration::days(LOOKAHEAD_DAYS)).unwrap_or(NaiveDate::MAX)
+            {
                 break;
             }
         }
@@ -76,16 +73,12 @@ fn apply_exceptions(exceptions: &[Exception], raw: NaiveDate) -> Option<NaiveDat
 }
 
 /// Completes one occurrence of a task.
-///
-/// A one-off task is marked done. A recurring one advances to its next
-/// occurrence instead — the series is the thing that persists, so completing
-/// "gym every day" today should leave tomorrow's gym waiting. Returns the new
-/// due date when the series advanced.
 pub fn complete_occurrence(task: &mut Task, on: NaiveDate) -> Option<NaiveDate> {
     if !task.is_recurring() {
         task.completed_at = Some(on);
         return None;
     }
+    task.recurrence_anchor = task.recurrence_anchor.or(task.due);
     let after = task.due.map_or(on, |due| due.max(on));
     let next = next_occurrence(task, after.succ_opt()?);
     // A series that has run out completes for good.
@@ -193,7 +186,7 @@ impl RawOccurrences {
         let weekday = *days_of_week.get(self.day_index)?;
         let block = self
             .base_monday
-            .checked_add_signed(Duration::try_weeks((self.step * every) as i64)?)?;
+            .checked_add_signed(Duration::try_weeks(self.step as i64 * every as i64)?)?;
         block.checked_add_signed(Duration::days(weekday.num_days_from_monday() as i64))
     }
 
@@ -227,8 +220,9 @@ fn days(step: u32, every: u32) -> Option<Duration> {
 /// `target` — clamped to the length of the month, so a rule on the 31st falls
 /// on the 30th in a 30-day month rather than skipping it.
 fn monthly(anchor: NaiveDate, step: u32, every: u32, target: u32) -> Option<NaiveDate> {
-    let total = anchor.year() * 12 + anchor.month0() as i32 + (step * every) as i32;
-    let year = total.div_euclid(12);
+    let total = (anchor.year() as i64 * 12 + anchor.month0() as i64)
+        .checked_add(step as i64 * every as i64)?;
+    let year = i32::try_from(total.div_euclid(12)).ok()?;
     let month = total.rem_euclid(12) as u32 + 1;
     NaiveDate::from_ymd_opt(year, month, target.min(days_in_month(year, month)))
 }
@@ -241,11 +235,6 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 }
 
 /// Ticks one checklist item, and closes the occurrence when the list is a
-/// backlog rather than a set of steps.
-///
-/// This is what makes a standing task like "Learning" work: the list holds the
-/// things you mean to get to, and finishing one *is* finishing this week's
-/// occurrence. Returns the date the series moved to, if it moved.
 pub fn complete_item(task: &mut Task, item: uuid::Uuid, on: NaiveDate) -> Option<NaiveDate> {
     let sub = task.subtasks.iter_mut().find(|s| s.id == item)?;
     sub.done = !sub.done;

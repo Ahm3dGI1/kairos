@@ -7,12 +7,6 @@ use uuid::Uuid;
 pub type HabitId = Uuid;
 
 /// What a day's entry for a habit looks like.
-///
-/// Not every habit is a yes or a no. "Did I read" is a tick; "how many pages"
-/// and "how long did I sleep" are numbers, and flattening them to a tick
-/// throws away the only part worth looking back at. Sleep and screen time
-/// were once two hard-coded columns for exactly this reason — they are now
-/// just the first two habits of the kinds that already existed in spirit.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum HabitKind {
@@ -64,7 +58,7 @@ impl HabitKind {
                 let number = if (value - value.round()).abs() < f64::EPSILON {
                     format!("{}", value.round() as i64)
                 } else {
-                    format!("{value:.1}")
+                    value.to_string()
                 };
                 if unit.is_empty() {
                     number
@@ -193,10 +187,6 @@ impl DayLog {
 }
 
 /// One block of a month's journal: a heading and whatever goes under it.
-///
-/// The title is usually a day ("18", "Friday") but nothing enforces that — the
-/// journal is a month-long page you write down, not a form with one box per
-/// date, so a heading can just as well be "the trip" or nothing at all.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JournalEntry {
     pub id: Uuid,
@@ -243,11 +233,6 @@ impl MonthJournal {
 }
 
 /// How many consecutive days up to `today` a habit was ticked.
-///
-/// Today not being ticked yet does not break the streak: the day is not over,
-/// and a tracker that shows your run collapsing to zero every morning is a
-/// tracker you stop trusting. The count simply starts from yesterday until you
-/// tick it.
 pub fn streak(done_days: &HashSet<NaiveDate>, today: NaiveDate) -> u32 {
     let mut day = today;
     if !done_days.contains(&day) {
@@ -276,10 +261,6 @@ pub fn format_duration(minutes: u32) -> String {
 }
 
 /// Reads "7h30", "7h 30m", "7.5h", "90m" or a bare number of minutes.
-///
-/// Accepting several shapes matters more here than anywhere else in the app:
-/// this is a number typed once a day, and being told off for the format is
-/// exactly the friction the project exists to remove.
 pub fn parse_duration(text: &str) -> Option<u32> {
     let text = text.trim().to_lowercase();
     if text.is_empty() {
@@ -296,7 +277,7 @@ pub fn parse_duration(text: &str) -> Option<u32> {
         if let Some((hours, rest)) = minutes.split_once('h') {
             let hours: u32 = hours.trim().parse().ok()?;
             let rest: u32 = rest.trim().parse().unwrap_or(0);
-            return Some(hours * 60 + rest);
+            return hours.checked_mul(60)?.checked_add(rest);
         }
         return minutes.trim().parse().ok();
     }
@@ -304,7 +285,7 @@ pub fn parse_duration(text: &str) -> Option<u32> {
     if let Some((hours, rest)) = text.split_once('h') {
         let hours: u32 = hours.trim().parse().ok()?;
         let rest: u32 = if rest.trim().is_empty() { 0 } else { rest.trim().parse().ok()? };
-        return Some(hours * 60 + rest);
+        return hours.checked_mul(60)?.checked_add(rest);
     }
     // A bare number is minutes.
     text.parse().ok()
