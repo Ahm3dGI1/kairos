@@ -4,7 +4,7 @@
 
 An offline-first Windows todo app. Type `gym every day 5pm @health #fitness !p1`
 to capture a structured recurring task. Your data lives in editable Markdown
-files, with SQLite as a local index. No account or paid tier.
+files, with SQLite as a local index.
 
 ## Features
 
