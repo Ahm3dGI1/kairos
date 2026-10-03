@@ -21,14 +21,17 @@ files, with SQLite as a local index.
 
 1. Open a view and select **Open as widget**, or create widgets from Settings.
 2. Drag the widget header, resize its edges, and optionally select **Pin**.
-3. Choose **Save layout** in a widget or **Save current widget layout** in Settings.
+3. Positions, sizes, filters and pins save automatically as you change them.
 4. Keep **Restore saved layout when Kairos starts** enabled.
 5. Enable **Start with Windows** from the installed app to restore the layout at sign-in.
 
-Closing a widget does not change the saved layout. Close unwanted widgets and save again
-to update it. Layouts live in `widget-layout.json` in the vault. If a monitor is missing,
+Closing a widget removes it from the saved layout automatically.
+Layouts live in `widget-layout.json` in the vault. If a monitor is missing,
 widgets reopen on an available monitor. Pinning keeps a widget above other windows;
 unpinned widgets behave like normal windows.
+
+Widgets use compact headers and omit the capture bar. Calendar widgets offer week and
+month views; habit widgets show the tracking grid without the journal or monthly summary.
 
 ## Data and recovery
 
