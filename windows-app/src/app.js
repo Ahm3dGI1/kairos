@@ -9,6 +9,8 @@ const widgetMode =
   new URLSearchParams(location.search).has('widget') ||
   new URLSearchParams(location.hash.slice(1)).has('widget');
 let widgetContext = null;
+let calendarView = 'month';
+let calendarWeek = null;
 const PAGES = ['agenda', 'calendar', 'habits', 'workout', 'settings'];
 
 /** Pages a setting can switch off. Tasks and Settings are always reachable. */
@@ -79,6 +81,7 @@ const capture = createCapture({
 
 // -- habits
 const habits = createHabits({
+  compact: widgetMode,
   rows: dom['habit-rows'],
   journal: dom.journal,
   summary: dom.summary,
@@ -87,6 +90,13 @@ const habits = createHabits({
     if (state.page !== 'habits') return;
     dom.here.textContent = label;
     dom.count.textContent = `${count} habit${count === 1 ? '' : 's'}`;
+    if (widgetMode) {
+      clear(dom['status-tools']);
+      dom['status-tools'].append(
+        el('button', { type: 'button', text: '‹', 'aria-label': 'Previous month', onclick: () => habits.step(-1) }),
+        el('button', { type: 'button', text: '›', 'aria-label': 'Next month', onclick: () => habits.step(1) }),
+      );
+    }
   },
 });
 
@@ -305,6 +315,15 @@ function renderLists() {
 
 function renderCalendarTools() {
   clear(dom['status-tools']);
+  if (widgetMode) {
+    for (const view of ['week', 'month']) {
+      dom['status-tools'].append(el('button', { type: 'button', text: view, 'aria-pressed': String(calendarView === view), onclick: () => {
+        calendarView = view;
+        renderCalendarTools();
+        renderCalendar();
+      }}));
+    }
+  }
   dom['status-tools'].append(
     el('button', { type: 'button', text: '‹ H', onclick: () => stepMonth(-1) }),
     el('button', {
@@ -313,6 +332,7 @@ function renderCalendarTools() {
       text: 'T today',
       onclick: () => {
         state.month = null;
+        calendarWeek = null;
         renderCalendar();
       },
     }),
@@ -491,19 +511,34 @@ async function renderCalendar() {
   clear(dom['cal-grid']);
   const first = new Date(year, month - 1, 1);
   const lead = mondayFirst ? (first.getDay() + 6) % 7 : first.getDay();
-  const start = new Date(year, month - 1, 1 - lead);
+  let start = new Date(year, month - 1, 1 - lead);
   const todayIso = toIso(state.todayDate);
 
   // Enough whole weeks to hold the month: a 31-day month that starts on the
   // last day of the week needs six rows, and five would silently cut it off.
   const length = new Date(year, month, 0).getDate();
-  const cells = Math.ceil((lead + length) / 7) * 7;
+  let cells = Math.ceil((lead + length) / 7) * 7;
+  const week = widgetMode && calendarView === 'week';
+  dom['cal-grid'].classList.toggle('week-view', week);
+  if (week) {
+    start = new Date(calendarWeek ?? state.todayDate);
+    start.setDate(start.getDate() - (mondayFirst ? (start.getDay() + 6) % 7 : start.getDay()));
+    cells = 7;
+    const end = new Date(start); end.setDate(end.getDate() + 6);
+    dom.here.textContent = `${start.toLocaleDateString()} – ${end.toLocaleDateString()}`;
+    const months = new Set([`${start.getFullYear()}-${start.getMonth()+1}`, `${end.getFullYear()}-${end.getMonth()+1}`]);
+    for (const pair of months) {
+      const [y,m] = pair.split('-').map(Number);
+      if (y === year && m === month) continue;
+      for (const day of (await call('calendar_month', {year:y, month:m}, 'Calendar')) ?? []) byDate.set(day.date, day.tasks);
+    }
+  }
 
   for (let i = 0; i < cells; i += 1) {
     const date = new Date(start);
     date.setDate(start.getDate() + i);
     const iso = toIso(date);
-    const inMonth = date.getMonth() === month - 1;
+    const inMonth = week || date.getMonth() === month - 1;
     const items = byDate.get(iso) ?? [];
     const overdue = items.some((t) => t.overdue);
 
@@ -551,6 +586,12 @@ async function renderCalendar() {
 }
 
 function stepMonth(delta) {
+  if (widgetMode && calendarView === 'week') {
+    calendarWeek = new Date(calendarWeek ?? state.todayDate);
+    calendarWeek.setDate(calendarWeek.getDate() + delta * 7);
+    renderCalendar();
+    return;
+  }
   const [year, month] = state.month ?? [state.todayDate.getFullYear(), state.todayDate.getMonth() + 1];
   const date = new Date(year, month - 1 + delta, 1);
   state.month = [date.getFullYear(), date.getMonth() + 1];
@@ -674,7 +715,7 @@ function setPage(page) {
   dom['capture-hint'].textContent = HINTS[page];
   // The bar captures a task on two pages and a journal line on the third;
   // there is nothing to capture into on the workout book or in settings.
-  const noCapture = page === 'workout' || page === 'settings';
+  const noCapture = widgetMode || page === 'workout' || page === 'settings';
   dom.capture.hidden = noCapture;
   dom.preview.hidden = noCapture;
   dom['quick-add'].placeholder =
@@ -750,6 +791,7 @@ document.addEventListener('keydown', (event) => {
   if (key === 't' && state.page === 'calendar') {
     event.preventDefault();
     state.month = null;
+    calendarWeek = null;
     renderCalendar();
     return;
   }
@@ -757,7 +799,7 @@ document.addEventListener('keydown', (event) => {
   switch (key) {
     case 'n':
       event.preventDefault();
-      capture.focus();
+      if (!widgetMode) capture.focus();
       break;
     case '/':
       event.preventDefault();
@@ -888,11 +930,13 @@ async function boot() {
     widgetContext = await call('widget_context');
     const bar = el('div', { class: 'widget-chrome' });
     const title = el('span', { class: 'widget-title', text: widgetContext?.view ?? 'Kairos', 'data-tauri-drag-region': '' });
-    const pin = el('button', { type: 'button', text: widgetContext?.pinned ? 'Unpin' : 'Pin', onclick: async () => {
-      const pinned = await call('pin_widget'); if (pinned !== null) pin.textContent = pinned ? 'Unpin' : 'Pin';
+    const pin = el('button', { type: 'button', 'aria-label': widgetContext?.pinned ? 'Unpin' : 'Pin', title: 'Pin above other windows', class: widgetContext?.pinned ? 'on' : '', onclick: async () => {
+      const pinned = await call('pin_widget'); if (pinned !== null) { pin.setAttribute('aria-label', pinned ? 'Unpin' : 'Pin'); pin.classList.toggle('on', pinned); }
     }});
-    bar.append(title, pin, el('button', { type: 'button', text: 'Save layout', onclick: saveWidgetLayout }),
-      el('button', { type: 'button', text: 'Close', onclick: () => window.__TAURI__.window.getCurrentWindow().close() }));
+    pin.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 6 4 3v2H6v-2l4-3z"/><path d="M12 15v5"/></svg>';
+    bar.append(title, pin,
+      el('button', { type: 'button', text: '↗', 'aria-label': 'Open Kairos', title: 'Open Kairos', onclick: () => call('show_main_window') }),
+      el('button', { type: 'button', text: '×', 'aria-label': 'Close', title: 'Close widget', onclick: () => window.__TAURI__.window.getCurrentWindow().close() }));
     document.body.prepend(bar);
     state.project = widgetContext?.project ?? null;
     if (widgetContext?.routine) workout.select(widgetContext.routine);
@@ -908,12 +952,6 @@ boot();
 function saveWidgetContext() {
   if (!widgetMode) return;
   return call('update_widget_context', { view: state.page, project: state.project, routine: workout.routine() });
-}
-async function saveWidgetLayout() {
-  await saveWidgetContext();
-  const layout = await call('widget_layout');
-  const saved = await call('save_widget_layout', { restoreOnStart: layout?.restore_on_start ?? true }, 'Save widget layout');
-  if (saved) toast(`saved ${saved.widgets.length} widgets`);
 }
 const popOut = el('button', { class: 'pop-out', type: 'button', text: 'Open as widget', onclick: () =>
   call('create_widget', { view: state.page, project: state.project, routine: workout.routine() }, 'Create widget') });

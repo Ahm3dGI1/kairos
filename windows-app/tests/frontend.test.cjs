@@ -7,8 +7,9 @@ let browser;
 before(async () => { browser = await chromium.launch({ headless: true, ...(process.env.KAIROS_BROWSER_CHANNEL ? { channel: process.env.KAIROS_BROWSER_CHANNEL } : {}) }); });
 after(async () => { await browser?.close(); });
 
-async function open(file = 'index.html', widget = false) {
+async function open(file = 'index.html', widget = false, view = 'habits') {
   const page = await browser.newPage();
+  if (widget) await page.setViewportSize({width:650,height:300});
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.route('http://kairos.test/**', async route => {
@@ -16,7 +17,7 @@ async function open(file = 'index.html', widget = false) {
     const content = await fs.readFile(path.join(__dirname, '../src', name));
     await route.fulfill({ body: content, contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
   });
-  await page.addInitScript(() => {
+  await page.addInitScript((view) => {
     const listeners = {};
     window.calls = [];
     window.emit = event => (listeners[event] || []).forEach(fn => fn({ payload: null }));
@@ -37,12 +38,12 @@ async function open(file = 'index.html', widget = false) {
           case 'tags': return [];
           case 'agenda': return [{id:'today',label:'Today',tasks:[task]}];
           case 'update_task': Object.assign(task,args.edit); window.emit('data-changed'); return task;
-          case 'habit_month': return {label:'September 2026',days,habits:[],archived:[]};
+          case 'habit_month': return {label:'September 2026',days,habits:[{id:'habit1',name:'Gym',kind:'check',numeric:false,done:days.map(()=>false),count:0,streak:0}],archived:[]};
           case 'month_journal': return {entries:[{id:'journal1',title:'23 Sep',body:'My journal'}]};
           case 'save_journal_entry': window.emit('data-changed'); return {};
           case 'workout_page': await new Promise(r => setTimeout(r,150)); return {routine:'routine1',name:'Push',routines:[],exercises:[],sessions:[],max_sets:3};
           case 'calendar_month': return [];
-          case 'widget_context': return {view:'habits',project:null,routine:null,pinned:false};
+          case 'widget_context': return {view,project:null,routine:null,pinned:false};
           case 'widget_layout': return {restore_on_start:true,widgets:[]};
           case 'save_widget_layout': return {restore_on_start:args.restoreOnStart,widgets:[{}]};
           case 'pin_widget': return true;
@@ -58,7 +59,7 @@ async function open(file = 'index.html', widget = false) {
         }
       } }
     };
-  });
+  }, view);
   const url = new URL(file, 'http://kairos.test/');
   if (widget && !url.hash) url.searchParams.set('widget', '1');
   await page.goto(url.href);
@@ -129,16 +130,36 @@ test('quick add respects keep-open and theme settings', async () => {
   assert.deepEqual(errors,[]); await page.close();
 });
 
-test('a widget opens its saved page and can save and pin', async () => {
+test('habit widget is compact and supports tracking and pinning without manual save', async () => {
   const {page,errors} = await open('index.html',true);
   await page.waitForTimeout(150);
   assert.equal(await page.locator('#habits-page').isVisible(),true);
   assert.equal(await page.locator('.rail').isVisible(),false);
   await page.getByRole('button',{name:'Pin',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Unpin',exact:true}).count(),1);
-  await page.getByRole('button',{name:'Save layout',exact:true}).click();
+  assert.equal(await page.locator('#capture').isVisible(), false);
+  assert.equal(await page.locator('#journal').isVisible(), false);
+  assert.equal(await page.getByRole('button',{name:'Save layout',exact:true}).count(), 0);
+  await page.getByRole('button',{name:'Gym on 2026-09-23',exact:true}).click();
   await page.waitForTimeout(100);
-  assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'save_widget_layout')),true);
+  assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'toggle_habit' && c.args.id === 'habit1' && c.args.date === '2026-09-23')),true);
+  assert.deepEqual(errors,[]); await page.close();
+});
+
+test('calendar widget switches between month and weeks across month boundaries', async () => {
+  const {page,errors} = await open('index.html', true, 'calendar');
+  assert.equal(await page.locator('#capture').isVisible(), false);
+  assert.ok(await page.locator('.cal-day').count() >= 28);
+  await page.getByRole('button',{name:'week',exact:true}).click();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator('.cal-day').count(), 7);
+  await page.getByRole('button',{name:'L ›',exact:true}).click();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator('.cal-day .num').count(), 7);
+  assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'calendar_month' && c.args.month === 10)),true);
+  await page.getByRole('button',{name:'month',exact:true}).click();
+  await page.waitForTimeout(100);
+  assert.ok(await page.locator('.cal-day').count() >= 28);
   assert.deepEqual(errors,[]); await page.close();
 });
 

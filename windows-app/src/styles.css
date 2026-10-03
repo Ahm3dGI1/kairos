@@ -2128,3 +2128,21 @@ body.view-widget { display: flex; flex-direction: column; }
 .widget-settings { padding: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
 .widget-settings p { flex-basis: 100%; }
 .workout-tools { display: flex; gap: 12px; padding: 10px; }
+
+body.view-widget { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; }
+.view-widget .widget-chrome { flex-shrink: 0; padding: 9px 12px; height: auto; min-height: 36px; background: var(--panel); font-family: var(--mono); font-size: 11px; }
+.view-widget .widget-title { color: var(--accent); text-transform: uppercase; letter-spacing: .14em; }
+.widget-chrome button { border: 0; background: transparent; color: var(--text-fainter); padding: 2px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; font-size: 20px; }
+.widget-chrome button:hover { color: var(--text); }
+.widget-chrome button.on { color: var(--accent); }
+.view-widget .capture, .view-widget .preview, .view-widget #lists,
+.view-widget #habits-page .section-rule, .view-widget .habit-lower,
+.view-widget .habit-total { display: none !important; }
+.view-widget .habit-rows { padding: 12px; overflow: auto; }
+.view-widget .habit-name { width: 100px; }
+.view-widget .habit-name .n { cursor: default; }
+.view-widget .habit-days, .view-widget .day-nums { gap: 2px; }
+.view-widget .day, .view-widget .day-nums span { width: 14px; flex-shrink: 0; }
+.view-widget #calendar-page { padding: 12px; }
+.view-widget .week-view { grid-template-rows: minmax(100px, 1fr); }
+.view-widget #status-tools button[aria-pressed="true"] { color: var(--accent); }

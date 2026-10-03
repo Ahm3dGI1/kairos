@@ -1,6 +1,6 @@
 import { isEditing, call, clear, el, parseDate, toIso } from './shared.js';
 
-export function createHabits({ rows, journal, summary, getToday, onMonth }) {
+export function createHabits({ rows, journal, summary, getToday, onMonth, compact = false }) {
   /** The month on screen as [year, month]; null means the current one. */
   let shown = null;
   let data = null;
@@ -25,7 +25,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
 
     onMonth?.(data.label, data.habits.length);
     renderGrid();
-    await renderJournal();
+    if (!compact) await renderJournal();
   }
 
   function step(delta) {
@@ -64,14 +64,14 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
       rows.appendChild(
         el('div', {
           class: 'empty',
-          text: 'no habits yet — type one below and press Enter, or "Sleep :duration"',
+          text: compact ? 'No habits yet — add habits in Kairos.' : 'no habits yet — type one below and press Enter, or "Sleep :duration"',
         }),
       );
     }
 
     // Archiving keeps the history but takes the row off the grid, so there
     // has to be somewhere it went.
-    if (data.archived?.length) {
+    if (!compact && data.archived?.length) {
       const list = el('div', { class: 'archived-habits' }, [
         el('span', { class: 'label', text: 'ARCHIVED' }),
       ]);
@@ -100,7 +100,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth }) {
       text: habit.name,
       title: 'Rename, change what it records, archive or delete',
     });
-    name.addEventListener('click', () => openEditor(habit, name));
+    if (!compact) name.addEventListener('click', () => openEditor(habit, name));
 
     // The stats belong on the right, where every row's read the same way.
     const elapsed = data.days.filter((d) => !d.is_future).length;
