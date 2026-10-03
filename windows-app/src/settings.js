@@ -138,15 +138,11 @@ export function createSettings({ container, onChange }) {
     });
     container.appendChild(el('section', { class: 'widget-settings' }, [
       el('strong', { text: 'Widget layout' }),
-      el('p', { text: 'Open any view as a widget, arrange and pin the windows, then save the layout. Enable Start with Windows below to restore it at sign-in.' }),
+      el('p', { text: 'Widget positions, sizes and pins save automatically. Enable Start with Windows below to restore your layout at sign-in.' }),
       ...['agenda', 'calendar', 'habits', 'workout', 'settings'].map(view => el('button', { type: 'button', text: `+ ${view === 'agenda' ? 'Tasks' : view}`, onclick: () => call('create_widget', { view }) })),
       el('label', {}, [restore, ' Restore saved layout when Kairos starts']),
-      el('button', { type: 'button', text: 'Save current widget layout', onclick: async () => {
-        const saved = await call('save_widget_layout', { restoreOnStart: restore.checked }, 'Save widget layout');
-        if (saved) { layout = saved; render(); }
-      }}),
       el('button', { type: 'button', text: 'Restore saved widgets', onclick: () => call('restore_widget_layout', undefined, 'Restore widgets') }),
-      el('p', { text: `${layout?.widgets.length ?? 0} widgets saved. Close unwanted widgets and save again to remove them from the layout.` }),
+      el('p', { text: `${layout?.widgets.length ?? 0} widgets saved. Closing a widget removes it from the layout automatically.` }),
     ]));
 
     const sections = [];

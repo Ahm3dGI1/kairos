@@ -5,7 +5,57 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder};
 
 #[derive(Default)]
-pub struct Windows(pub Mutex<HashMap<String, WidgetSpec>>);
+pub struct Windows(
+    pub Mutex<HashMap<String, WidgetSpec>>,
+    Mutex<Option<std::sync::mpsc::Sender<()>>>,
+);
+
+fn changed(app: &AppHandle) {
+    if let Ok(sender) = app.state::<Windows>().1.lock() {
+        if let Some(sender) = sender.as_ref() {
+            let _ = sender.send(());
+        }
+    }
+}
+
+fn persist(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let _guard = state.io.lock().map_err(|_| "storage lock poisoned")?;
+    let mut layout = WidgetLayout::load(&path(&state)).map_err(|e| e.to_string())?;
+    layout.widgets = app
+        .state::<Windows>()
+        .0
+        .lock()
+        .map_err(|_| "widget lock poisoned")?
+        .values()
+        .cloned()
+        .collect();
+    layout.widgets.sort_by_key(|w| w.id);
+    layout.save(&path(&state)).map_err(|e| e.to_string())
+}
+
+pub fn geometry(window: &tauri::Window, event: &tauri::WindowEvent) {
+    let app = window.app_handle();
+    if let Ok(mut entries) = app.state::<Windows>().0.lock() {
+        if let Some(spec) = entries.get_mut(window.label()) {
+            match event {
+                tauri::WindowEvent::Moved(pos) => {
+                    spec.x = pos.x;
+                    spec.y = pos.y;
+                }
+                tauri::WindowEvent::Resized(size) if size.width > 0 && size.height > 0 => {
+                    let scale = window.scale_factor().unwrap_or(1.0);
+                    spec.width = size.width as f64 / scale;
+                    spec.height = size.height as f64 / scale;
+                }
+                _ => return,
+            }
+        } else {
+            return;
+        }
+    }
+    changed(app);
+}
 
 fn path(state: &AppState) -> std::path::PathBuf {
     state.paths.vault_dir.join("widget-layout.json")
@@ -57,6 +107,7 @@ fn open(app: &AppHandle, mut spec: WidgetSpec) -> Result<(), String> {
     };
     window.set_position(PhysicalPosition::new(spec.x, spec.y)).map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
+    changed(app);
     Ok(())
 }
 
@@ -94,7 +145,7 @@ pub async fn create_widget(
             x: 80 + offset,
             y: 80 + offset,
             width: 650.0,
-            height: 520.0,
+            height: if view == WidgetView::Habits { 300.0 } else { 520.0 },
             pinned: false,
         },
     )
@@ -115,6 +166,7 @@ pub fn update_widget_context(
         spec.project = project;
         spec.routine = routine;
     }
+    changed(&app);
     Ok(())
 }
 
@@ -126,6 +178,8 @@ pub fn pin_widget(window: tauri::WebviewWindow, app: AppHandle) -> Result<bool, 
     let pinned = !spec.pinned;
     window.set_always_on_top(pinned).map_err(|e| e.to_string())?;
     spec.pinned = pinned;
+    drop(entries);
+    changed(&app);
     Ok(pinned)
 }
 
@@ -188,6 +242,17 @@ pub fn startup(app: &AppHandle) -> Result<(), String> {
             open(app, spec)?;
         }
     }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    *app.state::<Windows>().1.lock().map_err(|_| "widget lock poisoned")? = Some(sender);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        while receiver.recv().is_ok() {
+            while receiver.try_recv().is_ok() {}
+            if let Err(error) = persist(&app) {
+                eprintln!("Saving widget layout: {error}");
+            }
+        }
+    });
     Ok(())
 }
 
@@ -195,4 +260,5 @@ pub fn closed(app: &AppHandle, label: &str) {
     if let Ok(mut entries) = app.state::<Windows>().0.lock() {
         entries.remove(label);
     }
+    changed(app);
 }

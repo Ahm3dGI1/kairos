@@ -30,6 +30,7 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            widgets::geometry(window, event);
             use tauri::Manager;
             // Closing a window parks the app in the tray instead of quitting —
             // a todo app that vanishes when you close its window is a todo app
