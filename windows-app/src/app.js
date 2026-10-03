@@ -5,7 +5,9 @@ import { createSettings } from './settings.js';
 import { createWorkout } from './workout.js';
 import { call, clear, el, listen, parseDate, toIso, today, isEditing } from './shared.js';
 
-const widgetMode = new URLSearchParams(location.search).has('widget');
+const widgetMode =
+  new URLSearchParams(location.search).has('widget') ||
+  new URLSearchParams(location.hash.slice(1)).has('widget');
 let widgetContext = null;
 const PAGES = ['agenda', 'calendar', 'habits', 'workout', 'settings'];
 

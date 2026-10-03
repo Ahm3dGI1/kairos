@@ -59,7 +59,9 @@ async function open(file = 'index.html', widget = false) {
       } }
     };
   });
-  await page.goto(`http://kairos.test/${file}${widget ? '?widget=1' : ''}`);
+  const url = new URL(file, 'http://kairos.test/');
+  if (widget && !url.hash) url.searchParams.set('widget', '1');
+  await page.goto(url.href);
   await page.waitForTimeout(120);
   return { page, errors };
 }
@@ -138,4 +140,11 @@ test('a widget opens its saved page and can save and pin', async () => {
   await page.waitForTimeout(100);
   assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'save_widget_layout')),true);
   assert.deepEqual(errors,[]); await page.close();
+});
+
+test('fragment widget URL initializes the widget frontend', async () => {
+  const { page, errors } = await open('index.html#widget=1', true);
+  assert.equal(await page.locator('.widget-chrome').count(), 1);
+  assert.deepEqual(errors, []);
+  await page.close();
 });

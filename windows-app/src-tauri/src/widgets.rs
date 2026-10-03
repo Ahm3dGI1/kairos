@@ -38,7 +38,7 @@ fn open(app: &AppHandle, mut spec: WidgetSpec) -> Result<(), String> {
         .map_err(|_| "widget lock poisoned")?
         .insert(label.clone(), spec.clone());
     let result =
-        WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html?widget=1".into()))
+        WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html#widget=1".into()))
             .title(format!("Kairos - {}", spec.view.name()))
             .inner_size(spec.width, spec.height)
             .min_inner_size(360.0, 300.0)
@@ -75,7 +75,8 @@ pub fn widget_context(
 }
 
 #[tauri::command]
-pub fn create_widget(
+// WebView2 window creation deadlocks inside synchronous Tauri commands on Windows.
+pub async fn create_widget(
     app: AppHandle,
     view: WidgetView,
     project: Option<String>,
@@ -141,11 +142,9 @@ pub fn save_widget_layout(
 ) -> Result<WidgetLayout, String> {
     let _guard = state.io.lock().map_err(|_| "storage lock poisoned")?;
     let mut layout = WidgetLayout { restore_on_start, widgets: Vec::new() };
-    for (label, original) in
-        app.state::<Windows>().0.lock().map_err(|_| "widget lock poisoned")?.iter()
-    {
-        if let Some(window) = app.get_webview_window(label) {
-            let mut spec = original.clone();
+    let entries = app.state::<Windows>().0.lock().map_err(|_| "widget lock poisoned")?.clone();
+    for (label, mut spec) in entries {
+        if let Some(window) = app.get_webview_window(&label) {
             let pos = window.outer_position().map_err(|e| e.to_string())?;
             let size = window.inner_size().map_err(|e| e.to_string())?;
             let scale = window.scale_factor().map_err(|e| e.to_string())?;
@@ -170,7 +169,10 @@ pub fn set_widget_restore(state: State<'_, AppState>, enabled: bool) -> Result<(
 }
 
 #[tauri::command]
-pub fn restore_widget_layout(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn restore_widget_layout(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let layout = WidgetLayout::load(&path(&state)).map_err(|e| e.to_string())?;
     for spec in layout.widgets {
         open(&app, spec)?;
