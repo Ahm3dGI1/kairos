@@ -19,7 +19,7 @@ files, with SQLite as a local index.
 
 ## Widgets and startup
 
-1. Open a view and select **Open as widget**, or create widgets from Settings.
+1. Press **W** or select the bottom-left **Widgets** button and choose a widget.
 2. Drag the widget header, resize its edges, and optionally select **Pin**.
 3. Positions, sizes, filters and pins save automatically as you change them.
 4. Keep **Restore saved layout when Kairos starts** enabled.
@@ -31,7 +31,9 @@ widgets reopen on an available monitor. Pinning keeps a widget above other windo
 unpinned widgets behave like normal windows.
 
 Widgets use compact headers and omit the capture bar. Calendar widgets offer week and
-month views; habit widgets show the tracking grid without the journal or monthly summary.
+month views and never navigate to app tabs. Habit widgets show the tracking grid;
+at widths above 900 pixels, monthly statistics appear on the right. The original Tasks
+sticky note remains available from the same picker.
 
 ## Data and recovery
 

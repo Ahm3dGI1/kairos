@@ -42,7 +42,7 @@ async function open(file = 'index.html', widget = false, view = 'habits') {
           case 'month_journal': return {entries:[{id:'journal1',title:'23 Sep',body:'My journal'}]};
           case 'save_journal_entry': window.emit('data-changed'); return {};
           case 'workout_page': await new Promise(r => setTimeout(r,150)); return {routine:'routine1',name:'Push',routines:[],exercises:[],sessions:[],max_sets:3};
-          case 'calendar_month': return [];
+          case 'calendar_month': return [{date:'2026-09-23',tasks:[task]}];
           case 'widget_context': return {view,project:null,routine:null,pinned:false};
           case 'widget_layout': return {restore_on_start:true,widgets:[]};
           case 'save_widget_layout': return {restore_on_start:args.restoreOnStart,widgets:[{}]};
@@ -131,12 +131,15 @@ test('quick add respects keep-open and theme settings', async () => {
 });
 
 test('habit widget is compact and supports tracking and pinning without manual save', async () => {
-  const {page,errors} = await open('index.html',true);
+  const {page,errors} = await open('widget.html',true);
   await page.waitForTimeout(150);
-  assert.equal(await page.locator('#habits-page').isVisible(),true);
+  assert.equal(await page.locator('.widget-habits').isVisible(),true);
   assert.equal(await page.locator('.rail').isVisible(),false);
-  await page.getByRole('button',{name:'Pin',exact:true}).click();
-  assert.equal(await page.getByRole('button',{name:'Unpin',exact:true}).count(),1);
+  await page.locator('#pin').click();
+  assert.equal(await page.locator('#pin').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('.widget-habit-stats').isVisible(),false);
+  await page.setViewportSize({width:1050,height:400});
+  assert.equal(await page.locator('.widget-habit-stats').isVisible(),true);
   assert.equal(await page.locator('#capture').isVisible(), false);
   assert.equal(await page.locator('#journal').isVisible(), false);
   assert.equal(await page.getByRole('button',{name:'Save layout',exact:true}).count(), 0);
@@ -147,25 +150,35 @@ test('habit widget is compact and supports tracking and pinning without manual s
 });
 
 test('calendar widget switches between month and weeks across month boundaries', async () => {
-  const {page,errors} = await open('index.html', true, 'calendar');
+  const {page,errors} = await open('widget.html', true, 'calendar');
   assert.equal(await page.locator('#capture').isVisible(), false);
-  assert.ok(await page.locator('.cal-day').count() >= 28);
+  assert.ok(await page.locator('.widget-date').count() >= 28);
+  await page.locator('.widget-calendar-task').first().click();
+  assert.equal(await page.locator('.widget-calendar').isVisible(),true);
+  assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'update_widget_context')),false);
   await page.getByRole('button',{name:'week',exact:true}).click();
   await page.waitForTimeout(100);
-  assert.equal(await page.locator('.cal-day').count(), 7);
-  await page.getByRole('button',{name:'L ›',exact:true}).click();
+  assert.equal(await page.locator('.widget-date').count(), 7);
+  await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.waitForTimeout(100);
-  assert.equal(await page.locator('.cal-day .num').count(), 7);
+  assert.equal(await page.locator('.widget-date-number').count(), 7);
   assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'calendar_month' && c.args.month === 10)),true);
   await page.getByRole('button',{name:'month',exact:true}).click();
   await page.waitForTimeout(100);
-  assert.ok(await page.locator('.cal-day').count() >= 28);
+  assert.ok(await page.locator('.widget-date').count() >= 28);
   assert.deepEqual(errors,[]); await page.close();
 });
 
-test('fragment widget URL initializes the widget frontend', async () => {
-  const { page, errors } = await open('index.html#widget=1', true);
-  assert.equal(await page.locator('.widget-chrome').count(), 1);
+test('the rail and W open one widget picker without a duplicate action', async () => {
+  const { page, errors } = await open();
+  assert.equal(await page.getByText('Open as widget',{exact:true}).count(),0);
+  await page.locator('#sticky-toggle').click();
+  await page.getByRole('dialog',{name:'Widgets'}).getByRole('button',{name:'Tasks',exact:true}).click();
+  assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'toggle_widget_command')),true);
+  await page.locator('#quick-add').blur();
+  await page.keyboard.press('w');
+  await page.getByRole('dialog',{name:'Widgets'}).getByRole('button',{name:'Calendar',exact:true}).click();
+  assert.equal(await page.evaluate(() => window.calls.some(c => c.cmd === 'create_widget' && c.args.view === 'calendar')),true);
   assert.deepEqual(errors, []);
   await page.close();
 });
