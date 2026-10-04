@@ -4,8 +4,11 @@ const list = document.getElementById('list');
 const counts = document.getElementById('counts');
 const pin = document.getElementById('pin');
 let todayDate = new Date();
+let context = null;
+let refreshView = null;
 
 async function refresh() {
+  if (refreshView) return refreshView();
   todayDate = (await today()) ?? new Date();
   const tasks = (await call('list_tasks', { filter: 'Today', sort: 'Due' }, 'Sticky note')) ?? [];
 
@@ -60,16 +63,31 @@ function showPin(pinned) {
 }
 
 pin.addEventListener('click', async () => {
-  showPin(Boolean(await call('toggle_sticky_pin', undefined, 'Pin')));
+  showPin(Boolean(await call(context ? 'pin_widget' : 'toggle_sticky_pin', undefined, 'Pin')));
 });
 document.getElementById('open').addEventListener('click', () => invoke('show_main_window'));
-document.getElementById('close').addEventListener('click', () =>
-  invoke('hide_window', { label: 'widget' }),
-);
+function close() {
+  if (context) return window.__TAURI__.window.getCurrentWindow().close();
+  return invoke('hide_window', { label: 'widget' });
+}
+document.getElementById('close').addEventListener('click', close);
+document.addEventListener('keydown', event => {
+  if (event.target.closest('input, textarea, select')) return;
+  if (event.key.toLowerCase() === 'w' || event.key === 'Escape') close();
+});
 
-call('sticky_pinned', undefined, 'Pin').then((pinned) => showPin(Boolean(pinned)));
-listen('data-changed', refresh);
-refresh();
+async function boot() {
+  context = await call('widget_context');
+  showPin(context ? context.pinned : Boolean(await call('sticky_pinned')));
+  if (context && context.view !== 'agenda') {
+    list.hidden = true;
+    const { createWidgetView } = await import('./widget-views.js');
+    refreshView = createWidgetView(context);
+  }
+  await refresh();
+  listen('data-changed', refresh);
+}
+boot();
 
 // Catch the date rolling over while the note sits open for days.
 setInterval(refresh, 5 * 60 * 1000);

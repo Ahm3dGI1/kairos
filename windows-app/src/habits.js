@@ -26,6 +26,7 @@ export function createHabits({ rows, journal, summary, getToday, onMonth, compac
     onMonth?.(data.label, data.habits.length);
     renderGrid();
     if (!compact) await renderJournal();
+    else if (summary) { clear(summary); renderSummary(); }
   }
 
   function step(delta) {

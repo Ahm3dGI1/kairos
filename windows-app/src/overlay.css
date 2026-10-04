@@ -166,9 +166,44 @@ body.sticky {
 }
 
 .sticky-empty {
+  display: block !important;
   padding: 18px 0;
   text-align: center;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-ghost);
+}
+
+.widget-content { flex: 1; min-height: 0; overflow: auto; container-type: inline-size; }
+.widget-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 14px; font: 12px var(--mono); }
+.widget-period { color: var(--text-2); }
+.widget-navigation, .widget-segments { display: flex; align-items: center; gap: 6px; }
+.widget-content button { cursor: pointer; }
+.widget-navigation button, .widget-segments button { border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-fainter); font: 12px var(--mono); padding: 5px 9px; }
+.widget-navigation button:hover { color: var(--accent); background: var(--raised); }
+.widget-segments { margin: 12px 14px 0; width: fit-content; padding: 3px; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; }
+.widget-segments button { text-transform: capitalize; min-width: 62px; }
+.widget-segments button[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent-line); color: var(--accent); }
+.widget-weekdays, .widget-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; padding: 0 12px; }
+.widget-weekdays { font: 9px var(--mono); color: var(--text-fainter); padding-bottom: 7px; text-align: center; }
+.widget-calendar-grid { padding-bottom: 12px; }
+.widget-date { min-height: 68px; min-width: 0; padding: 6px; border: 1px solid var(--line); border-radius: 5px; display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
+.widget-date-number { font: 11px var(--mono); color: var(--text-dim); }
+.widget-date.is-today { border-color: var(--accent); background: var(--accent-bg); }
+.widget-date.is-today .widget-date-number { color: var(--accent); }
+.widget-date.is-outside { opacity: .4; }
+.widget-calendar-task { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-2); }
+.widget-calendar-grid.is-week .widget-date { min-height: 150px; }
+.widget-habit-body { display: grid; grid-template-columns: minmax(0,1fr); }
+.widget-habit-stats { display: none; }
+.widget-habits .habit-rows { padding: 12px 14px; min-width: 0; }
+.widget-habits .habit-total { display: none; }
+.widget-habits .habit-name { width: 110px; position: sticky; left: 0; z-index: 1; background: var(--panel); }
+.widget-habits .habit-name .n { cursor: default; }
+.widget-habits .habit-days, .widget-habits .day-nums { gap: 3px; }
+.widget-habits .day, .widget-habits .day-nums span { width: 17px; flex-shrink: 0; }
+.widget-routines { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+@container (min-width: 900px) {
+  .widget-habit-body { grid-template-columns: minmax(0,1fr) 180px; }
+  .widget-habit-stats { display: block; padding: 14px; border-left: 1px solid var(--line); }
 }

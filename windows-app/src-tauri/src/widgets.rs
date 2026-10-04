@@ -87,17 +87,16 @@ fn open(app: &AppHandle, mut spec: WidgetSpec) -> Result<(), String> {
         .lock()
         .map_err(|_| "widget lock poisoned")?
         .insert(label.clone(), spec.clone());
-    let result =
-        WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html#widget=1".into()))
-            .title(format!("Kairos - {}", spec.view.name()))
-            .inner_size(spec.width, spec.height)
-            .min_inner_size(360.0, 300.0)
-            .decorations(false)
-            .resizable(true)
-            .always_on_top(spec.pinned)
-            .focused(false)
-            .visible(false)
-            .build();
+    let result = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("widget.html".into()))
+        .title(format!("Kairos - {}", spec.view.name()))
+        .inner_size(spec.width, spec.height)
+        .min_inner_size(360.0, 300.0)
+        .decorations(false)
+        .resizable(true)
+        .always_on_top(spec.pinned)
+        .focused(false)
+        .visible(false)
+        .build();
     let window = match result {
         Ok(w) => w,
         Err(e) => {
