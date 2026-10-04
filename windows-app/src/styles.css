@@ -2128,6 +2128,10 @@ body.view-widget { display: flex; flex-direction: column; }
 .widget-settings { padding: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
 .widget-settings p { flex-basis: 100%; }
 .workout-tools { display: flex; gap: 12px; padding: 10px; }
+.widget-picker { position: fixed; left: 60px; bottom: 14px; z-index: 100; width: 190px; padding: 12px; display: grid; gap: 6px; background: var(--panel); border: 1px solid var(--edge-strong); border-radius: 8px; box-shadow: 0 10px 35px #0005; }
+.widget-picker strong { padding: 4px 8px 8px; color: var(--text-fainter); font: 11px var(--mono); text-transform: uppercase; letter-spacing: .14em; }
+.widget-picker button { border: 0; border-radius: 4px; background: transparent; text-align: left; padding: 9px; color: var(--text); cursor: pointer; }
+.widget-picker button:hover, .widget-picker button:focus-visible { background: var(--raised); color: var(--accent); }
 
 body.view-widget { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; overflow: hidden; }
 .view-widget .widget-chrome { flex-shrink: 0; padding: 9px 12px; height: auto; min-height: 36px; background: var(--panel); font-family: var(--mono); font-size: 11px; }

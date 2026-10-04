@@ -857,7 +857,7 @@ document.addEventListener('keydown', (event) => {
       break;
     case 'w':
       event.preventDefault();
-      call('toggle_widget_command', undefined, 'Sticky note');
+      toggleWidgetPicker();
       break;
     case '1':
     case '2':
@@ -876,9 +876,31 @@ document.addEventListener('keydown', (event) => {
 for (const name of PAGES) {
   dom[`page-${name}`].addEventListener('click', () => setPage(name));
 }
-dom['sticky-toggle'].addEventListener('click', () =>
-  call('toggle_widget_command', undefined, 'Sticky note'),
-);
+dom['sticky-toggle'].addEventListener('click', toggleWidgetPicker);
+dom['sticky-toggle'].setAttribute('aria-label', 'Widgets (W)');
+dom['sticky-toggle'].title = 'Widgets (W)';
+let widgetPicker = null;
+function toggleWidgetPicker() {
+  if (widgetPicker) { widgetPicker.remove(); widgetPicker = null; return; }
+  widgetPicker = el('div', { class: 'widget-picker', role: 'dialog', 'aria-label': 'Widgets' }, [
+    el('strong', { text: 'Widgets' }),
+    ...[['agenda','Tasks'],['calendar','Calendar'],['habits','Habits'],['workout','Workout']].map(([view,name]) => el('button', {
+      type: 'button', text: name, onclick: () => {
+        toggleWidgetPicker();
+        if (view === 'agenda') call('toggle_widget_command', undefined, 'Tasks widget');
+        else call('create_widget', {view}, 'Create widget');
+      },
+    })),
+  ]);
+  document.body.append(widgetPicker);
+  widgetPicker.querySelector('button').focus();
+}
+document.addEventListener('pointerdown', event => {
+  if (widgetPicker && !widgetPicker.contains(event.target) && !dom['sticky-toggle'].contains(event.target)) toggleWidgetPicker();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && widgetPicker) { toggleWidgetPicker(); dom['sticky-toggle'].focus(); }
+});
 
 listen('data-changed', () => refresh());
 setInterval(() => refresh(), 60_000);
@@ -953,6 +975,3 @@ function saveWidgetContext() {
   if (!widgetMode) return;
   return call('update_widget_context', { view: state.page, project: state.project, routine: workout.routine() });
 }
-const popOut = el('button', { class: 'pop-out', type: 'button', text: 'Open as widget', onclick: () =>
-  call('create_widget', { view: state.page, project: state.project, routine: workout.routine() }, 'Create widget') });
-document.querySelector('.status').appendChild(popOut);
